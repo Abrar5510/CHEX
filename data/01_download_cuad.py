@@ -40,15 +40,13 @@ def parse_args() -> argparse.Namespace:
 def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -> None:
     from datasets import load_dataset  # type: ignore
 
-    # theatticusproject/cuad returns PDF-only rows; theatticusproject/cuad-qa uses a
-    # legacy dataset script no longer supported. chenghao/cuad_qa is a parquet mirror
-    # with the same SQuAD-style schema (id, title, context, question, answers).
-    print("Loading CUAD QA dataset from HuggingFace (chenghao/cuad_qa)...")
+    # Load directly from parquet to avoid any cached legacy dataset scripts.
+    print("Loading CUAD QA dataset from parquet (chenghao/cuad_qa)...")
     ds = load_dataset(
-        "chenghao/cuad_qa",
+        "parquet",
+        data_files="hf://datasets/chenghao/cuad_qa/data/train-*.parquet",
         split="train",
         cache_dir=str(cache_dir),
-        verification_mode="no_checks",
     )
     first = ds[0]
     print(f"Row keys: {list(first.keys())}")
