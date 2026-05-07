@@ -301,14 +301,14 @@ BENCHMARK_ROWS = [
 BENCHMARK_DF = pd.DataFrame(BENCHMARK_ROWS)
 
 # ---------------------------------------------------------------------------
-# Gradio UI
+# Warning banner
 # ---------------------------------------------------------------------------
 
 WARNING_HTML = ""
 if model_load_error:
     WARNING_HTML = (
         '<div class="chex-banner">'
-        f'<span class="chex-banner-icon">⚠</span>'
+        '<span class="chex-banner-icon">⚠</span>'
         f'<div class="chex-banner-body"><strong>Model not loaded</strong> · '
         f'{model_load_error} — set <code>HF_MODEL_REPO</code> in Space secrets.</div>'
         '</div>'
@@ -321,9 +321,10 @@ if model_load_error:
 CHEX_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ── Reset & base ── */
+/* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* ── Design tokens ── */
 :root {
   --bg-base: #f3f4f7;
   --bg-grad: radial-gradient(ellipse 1200px 700px at 18% -10%, rgba(120,150,200,0.18), transparent 60%),
@@ -340,72 +341,161 @@ CHEX_CSS = """
   --fg-muted: #5b6275;
   --fg-subtle: #8a91a3;
   --green: #0f9d58;
+  --green-bg: rgba(34,197,94,0.10);
+  --green-border: rgba(34,197,94,0.28);
+  --red: #d23131;
+  --red-bg: rgba(239,68,68,0.09);
+  --red-border: rgba(239,68,68,0.28);
   --amber: #b87800;
   --amber-bg: rgba(245,158,11,0.10);
   --amber-border: rgba(245,158,11,0.30);
   --blur: 22px;
   --blur-strong: 32px;
-  --shadow-md: 0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px rgba(15,18,30,0.06), 0 1px 2px rgba(15,18,30,0.04);
+  --shadow-md: 0 1px 0 rgba(255,255,255,0.6) inset,
+               0 8px 24px rgba(15,18,30,0.06),
+               0 1px 2px rgba(15,18,30,0.04);
   --radius: 10px;
   --radius-lg: 16px;
 }
 
-.dark, [data-theme="dark"] {
-  --bg-base: #07090e;
-  --bg-grad: radial-gradient(ellipse 1100px 700px at 15% -5%, rgba(70,110,200,0.20), transparent 60%),
-             radial-gradient(ellipse 900px 600px at 95% 110%, rgba(150,90,220,0.14), transparent 55%),
-             linear-gradient(180deg, #0a0d14 0%, #06080d 100%);
-  --bg-elev: rgba(22,26,36,0.55);
-  --bg-elev-strong: rgba(28,32,44,0.72);
-  --bg-sunken: rgba(12,14,20,0.55);
-  --bg-input: rgba(14,17,25,0.55);
-  --border: rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.13);
-  --hairline: rgba(255,255,255,0.05);
-  --fg: #eceef4;
-  --fg-muted: #9ba3b6;
-  --fg-subtle: #6a7188;
-  --green: #4ade80;
-  --amber: #fbbf24;
+/* ── Body & app shell ── */
+body {
+  background: var(--bg-grad) !important;
+  background-attachment: fixed !important;
+  background-color: var(--bg-base) !important;
+  min-height: 100vh;
 }
 
-/* ── App shell ── */
 .gradio-container {
   font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
   font-size: 14px !important;
   line-height: 1.55 !important;
   color: var(--fg) !important;
-  background: var(--bg-grad) !important;
-  background-attachment: fixed !important;
-  background-color: var(--bg-base) !important;
+  background: transparent !important;
   -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
   letter-spacing: -0.006em !important;
   max-width: 1480px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
 }
 
-/* ── Topbar / header ── */
+/* ── Nuke ALL Gradio chrome ── */
+footer, .footer, .built-with, #footer,
+footer.svelte-1ax1toq, .svelte-1ax1toq.footer,
+.gradio-container > .footer,
+.share-button, .copy-all-button,
+.gradio-container > .top-panel { display: none !important; }
+
+/* Strip the outer container's own bg/padding */
+#root, .app, main {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* The inner .contain div Gradio wraps everything in */
+.contain, .container {
+  padding: 0 !important;
+  gap: 0 !important;
+  max-width: 100% !important;
+  background: transparent !important;
+}
+
+/* Every .block Gradio creates — reset ALL chrome */
+.block,
+.gr-block,
+.gr-box,
+.gr-group,
+.gradio-container .block {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* The padding/gap between row children */
+.gap, .gr-row { gap: 20px !important; }
+
+/* Panel wrappers */
+.panel, .gr-panel, .gr-padded {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Tabs outer wrapper */
+.tabs, .gr-tabs {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Individual tab content areas */
+.tabitem, .gr-tabitem {
+  background: transparent !important;
+  border: none !important;
+  padding: 24px !important;
+}
+
+/* Textbox wrappers — only reset the outer shell, let the inner textarea keep styling */
+[data-testid="textbox"],
+.gr-textbox {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* Label blocks */
+label.block, .label-wrap {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  gap: 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Row component */
+.row, .gr-row {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* Form groups */
+.form, .gr-form {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  gap: 14px !important;
+}
+
+/* ── Topbar ── */
 .chex-topbar {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 28px;
   height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: var(--bg-elev);
   backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   border-bottom: 1px solid var(--hairline);
-  margin-bottom: 0;
 }
-.chex-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+
 .chex-logo {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--fg), rgba(13,18,32,0.7));
-  color: var(--bg-base);
+  background: linear-gradient(135deg, #0d1220, rgba(13,18,32,0.7));
+  color: #f3f4f7;
   display: grid;
   place-items: center;
   font-family: 'JetBrains Mono', monospace;
@@ -413,21 +503,27 @@ CHEX_CSS = """
   font-size: 11px;
   letter-spacing: -0.05em;
   box-shadow: 0 4px 14px rgba(15,18,30,0.18), 0 1px 0 rgba(255,255,255,0.25) inset;
+  flex-shrink: 0;
 }
+
 .chex-name {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--fg);
+  font-family: 'Inter', sans-serif;
 }
+
 .chex-tag {
   font-size: 12px;
   color: var(--fg-muted);
   font-weight: 400;
   padding-left: 12px;
   border-left: 1px solid var(--hairline);
+  font-family: 'Inter', sans-serif;
 }
-.chex-status-pill {
+
+.chex-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -441,17 +537,19 @@ CHEX_CSS = """
   -webkit-backdrop-filter: blur(12px);
   font-family: 'JetBrains Mono', monospace;
   white-space: nowrap;
-  margin-left: auto;
 }
-.chex-status-dot {
-  width: 6px; height: 6px;
+
+.chex-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 0 3px rgba(15,157,88,0.22);
   display: inline-block;
+  flex-shrink: 0;
 }
 
-/* ── Banner ── */
+/* ── Warning banner ── */
 .chex-banner {
   display: flex;
   align-items: center;
@@ -464,10 +562,10 @@ CHEX_CSS = """
   color: var(--amber);
   font-size: 13px;
   font-family: 'Inter', sans-serif;
-  margin-bottom: 0;
+  font-weight: 500;
 }
-.chex-banner-icon { font-size: 14px; }
-.chex-banner-body { color: var(--fg); font-weight: 400; }
+.chex-banner-icon { font-size: 14px; flex-shrink: 0; }
+.chex-banner-body { color: var(--fg); font-weight: 400; line-height: 1.5; }
 .chex-banner-body strong { color: var(--fg); font-weight: 600; }
 .chex-banner code {
   font-family: 'JetBrains Mono', monospace;
@@ -477,15 +575,21 @@ CHEX_CSS = """
   border-radius: 4px;
 }
 
-/* ── Tabs ── */
+/* ── Tab bar ── */
 .tab-nav {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   -webkit-backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   border-bottom: 1px solid var(--hairline) !important;
+  border-top: none !important;
   padding: 0 20px !important;
-  gap: 2px !important;
+  gap: 0 !important;
+  position: sticky !important;
+  top: 60px !important;
+  z-index: 99 !important;
+  overflow: visible !important;
 }
+
 .tab-nav button {
   background: transparent !important;
   border: none !important;
@@ -495,35 +599,82 @@ CHEX_CSS = """
   font-size: 13px !important;
   font-weight: 500 !important;
   font-family: 'Inter', sans-serif !important;
+  letter-spacing: -0.003em !important;
   position: relative !important;
   white-space: nowrap !important;
-  transition: color 0.15s !important;
+  transition: color 0.15s ease !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
-.tab-nav button:hover { color: var(--fg) !important; }
-.tab-nav button.selected {
+
+.tab-nav button:hover {
   color: var(--fg) !important;
   background: transparent !important;
 }
-.tab-nav button.selected::after {
+
+.tab-nav button.selected,
+.tab-nav button[aria-selected="true"] {
+  color: var(--fg) !important;
+  background: transparent !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+
+.tab-nav button.selected::after,
+.tab-nav button[aria-selected="true"]::after {
   content: "";
   position: absolute;
-  left: 12px; right: 12px; bottom: -1px;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
   height: 1.5px;
   background: var(--fg);
   border-radius: 2px 2px 0 0;
 }
 
-/* ── Glass cards ── */
-.chex-card {
-  background: var(--bg-elev);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  overflow: hidden;
-  margin-bottom: 0;
+/* Tab content panels */
+.tabitem {
+  border: none !important;
+  background: transparent !important;
+  padding: 24px 24px !important;
 }
+
+/* ── Card components ── */
+.chex-card,
+.gradio-container .gr-group.chex-card-group,
+.gradio-container [data-testid="group"].chex-card-group {
+  background: var(--bg-elev) !important;
+  backdrop-filter: blur(var(--blur)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+/* Groups used as cards */
+.gradio-container .gr-group {
+  background: var(--bg-elev) !important;
+  backdrop-filter: blur(var(--blur)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+/* Inner content of groups gets consistent padding */
+.gradio-container .gr-group > *:not(.chex-card-header):not(.chex-chip-row) {
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+.gradio-container .gr-group > *:last-child {
+  padding-bottom: 18px !important;
+}
+
 .chex-card-header {
   padding: 16px 20px;
   display: flex;
@@ -532,6 +683,7 @@ CHEX_CSS = """
   gap: 12px;
   border-bottom: 1px solid var(--hairline);
 }
+
 .chex-card-title {
   font-size: 13.5px;
   font-weight: 600;
@@ -541,21 +693,84 @@ CHEX_CSS = """
   gap: 10px;
   color: var(--fg);
   white-space: nowrap;
+  font-family: 'Inter', sans-serif;
 }
+
 .chex-card-kicker {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   color: var(--fg-subtle);
   font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
-/* ── Override Gradio inputs to match design ── */
-.gradio-container input[type="text"],
-.gradio-container textarea,
-.gradio-container select,
+/* ── Chip row (load samples) ── */
+.chex-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg-sunken);
+  flex-wrap: wrap;
+}
+
+.chex-chip-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-subtle);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+/* ── Suggested question bar ── */
+.chex-suggested {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(13,18,32,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  font-family: 'Inter', sans-serif;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.chex-suggested-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+
+/* ── Labels on inputs ── */
+label > span:first-child,
+.label-wrap span,
+.gradio-container label span.text-gray-500,
+span.svelte-1b6s6s {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 500 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  color: var(--fg-subtle) !important;
+  margin-bottom: 6px !important;
+  display: block !important;
+}
+
+/* ── Textareas & inputs ── */
+textarea,
+input[type="text"],
+input[type="search"],
 .gradio-container .gr-input,
-label.block textarea,
-label.block input {
+.gradio-container .gr-textarea,
+.gradio-container [data-testid="textbox"] textarea,
+.gradio-container [data-testid="textbox"] input {
   background: var(--bg-input) !important;
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
@@ -564,88 +779,124 @@ label.block input {
   color: var(--fg) !important;
   font-family: 'Inter', sans-serif !important;
   font-size: 13px !important;
-  transition: border-color 0.18s, box-shadow 0.18s !important;
+  line-height: 1.6 !important;
+  padding: 11px 14px !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
+  resize: vertical !important;
 }
-label.block textarea:focus,
-label.block input:focus {
+
+textarea:focus,
+input[type="text"]:focus,
+.gradio-container [data-testid="textbox"] textarea:focus,
+.gradio-container [data-testid="textbox"] input:focus {
   border-color: var(--border-strong) !important;
   background: var(--bg-elev-strong) !important;
   box-shadow: 0 0 0 4px rgba(13,18,32,0.08) !important;
   outline: none !important;
 }
 
-/* Labels */
-label.block > span,
-.gr-form > label > span {
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 10.5px !important;
-  font-weight: 500 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
+textarea::placeholder,
+input::placeholder {
   color: var(--fg-subtle) !important;
 }
 
+/* Read-only / output textboxes */
+textarea[readonly],
+.gradio-container [data-testid="textbox"][data-interactive="false"] textarea {
+  background: var(--bg-sunken) !important;
+  border: 1px solid var(--hairline) !important;
+  color: var(--fg) !important;
+  cursor: default !important;
+}
+
 /* ── Buttons ── */
+.gradio-container button {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: var(--radius) !important;
+  padding: 10px 16px !important;
+  transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
+  cursor: pointer !important;
+  letter-spacing: -0.003em !important;
+}
+
 .gradio-container button.primary,
-.gradio-container .gr-button-primary {
+.gradio-container [data-testid="button"][variant="primary"],
+button.primary {
   background: var(--fg) !important;
   color: var(--bg-base) !important;
   border: 1px solid var(--fg) !important;
-  border-radius: var(--radius) !important;
-  font-family: 'Inter', sans-serif !important;
-  font-weight: 500 !important;
-  font-size: 13px !important;
-  padding: 10px 16px !important;
-  box-shadow: 0 6px 18px rgba(13,18,32,0.28), 0 1px 0 rgba(255,255,255,0.15) inset !important;
-  transition: opacity 0.18s !important;
+  box-shadow: 0 6px 18px rgba(13,18,32,0.28), 0 1px 0 rgba(255,255,255,0.1) inset !important;
 }
+
 .gradio-container button.primary:hover,
-.gradio-container .gr-button-primary:hover { opacity: 0.92 !important; }
+button.primary:hover {
+  opacity: 0.88 !important;
+  box-shadow: 0 4px 12px rgba(13,18,32,0.22) !important;
+}
 
 .gradio-container button.secondary,
-.gradio-container .gr-button-secondary {
+button.secondary {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
   color: var(--fg) !important;
   border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  font-family: 'Inter', sans-serif !important;
-  font-weight: 500 !important;
-  font-size: 13px !important;
-  padding: 10px 16px !important;
-  transition: background 0.18s, border-color 0.18s !important;
+  box-shadow: var(--shadow-md) !important;
 }
+
 .gradio-container button.secondary:hover,
-.gradio-container .gr-button-secondary:hover {
+button.secondary:hover {
   background: var(--bg-elev-strong) !important;
   border-color: var(--border-strong) !important;
 }
 
-/* Small ghost buttons (load sample etc.) */
-button.lg.secondary.svelte-cmf5ev,
-button[class*="sm"] {
+/* Small / sm-size buttons */
+button.sm,
+.gradio-container button[size="sm"],
+button.small {
   font-size: 12px !important;
   padding: 7px 11px !important;
 }
 
+/* ── File upload ── */
+.gradio-container .upload-container,
+.gradio-container [data-testid="file"] {
+  background: var(--bg-input) !important;
+  border: 1px dashed var(--border-strong) !important;
+  border-radius: var(--radius) !important;
+}
+
 /* ── Dataframe / benchmark table ── */
-.gradio-container table,
-.gradio-container .gr-dataframe table {
+.gradio-container .wrap.svelte-a4gbbr,
+.gradio-container .table-wrap,
+.gradio-container [data-testid="dataframe"] {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-md) !important;
+  overflow: hidden !important;
+}
+
+.gradio-container table {
+  background: transparent !important;
   font-size: 13px !important;
   font-family: 'Inter', sans-serif !important;
   border-collapse: separate !important;
   border-spacing: 0 !important;
-  overflow: hidden !important;
   width: 100% !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
 }
+
 .gradio-container th {
   background: var(--bg-sunken) !important;
   border-bottom: 1px solid var(--hairline) !important;
+  border-top: none !important;
   padding: 14px 18px !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 10.5px !important;
@@ -655,39 +906,78 @@ button[class*="sm"] {
   font-weight: 500 !important;
   text-align: left !important;
 }
+
 .gradio-container td {
   padding: 16px 18px !important;
   border-top: 1px solid var(--hairline) !important;
+  border-bottom: none !important;
   vertical-align: top !important;
   line-height: 1.6 !important;
   color: var(--fg) !important;
+  background: transparent !important;
 }
+
 .gradio-container tr:first-child td { border-top: none !important; }
 
-/* ── Markdown inside Gradio ── */
+/* Hallucinated rows — rows where 'Hallucinated?' is YES */
+.gradio-container tr:has(td:last-child:contains("YES")) td,
+.chex-hallucinated-row td {
+  background: color-mix(in srgb, var(--red-bg) 4%, transparent) !important;
+  box-shadow: inset 2px 0 0 var(--red) !important;
+}
+
+/* ── Markdown output ── */
 .gradio-container .prose,
-.gradio-container .md {
+.gradio-container .md,
+.gradio-container [data-testid="markdown"] {
   color: var(--fg) !important;
   font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.65 !important;
 }
-.gradio-container .prose h2 {
-  font-size: 19px !important;
+
+.gradio-container .prose h2,
+.gradio-container .md h2 {
+  font-size: 18px !important;
   font-weight: 600 !important;
   letter-spacing: -0.02em !important;
   color: var(--fg) !important;
   margin-bottom: 10px !important;
+  margin-top: 0 !important;
 }
-.gradio-container .prose h3 {
-  font-size: 14px !important;
+
+.gradio-container .prose h3,
+.gradio-container .md h3 {
+  font-size: 13.5px !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em !important;
   color: var(--fg) !important;
   margin-bottom: 8px !important;
+  margin-top: 16px !important;
 }
-.gradio-container .prose p {
+
+.gradio-container .prose p,
+.gradio-container .md p {
   color: var(--fg-muted) !important;
   font-size: 13px !important;
   line-height: 1.65 !important;
+  margin-bottom: 8px !important;
+}
+
+.gradio-container .prose strong,
+.gradio-container .md strong {
+  color: var(--fg) !important;
+  font-weight: 600 !important;
+}
+
+.gradio-container .prose code,
+.gradio-container .md code {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 12px !important;
+  background: rgba(13,18,32,0.06) !important;
+  padding: 1px 5px !important;
+  border-radius: 4px !important;
+  color: var(--fg) !important;
 }
 
 /* ── Bench intro card ── */
@@ -699,15 +989,18 @@ button[class*="sm"] {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: 24px 28px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
+
 .chex-bench-intro h2 {
   margin: 0 0 10px;
   font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--fg);
+  font-family: 'Inter', sans-serif;
 }
+
 .chex-bench-intro p {
   margin: 0;
   color: var(--fg-muted);
@@ -715,27 +1008,34 @@ button[class*="sm"] {
   line-height: 1.65;
   font-family: 'Inter', sans-serif;
 }
+
 .chex-bench-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 18px;
 }
+
 .chex-bench-stat {
   background: var(--bg-sunken);
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   padding: 12px 14px;
 }
+
 .chex-bench-stat .v {
   font-family: 'Inter', sans-serif;
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.025em;
   color: var(--fg);
+  line-height: 1.2;
+  margin-bottom: 4px;
 }
-.chex-bench-stat .v.red { color: #d23131; }
-.chex-bench-stat .v.green { color: #0f9d58; }
+
+.chex-bench-stat .v.red { color: var(--red); }
+.chex-bench-stat .v.green { color: var(--green); }
+
 .chex-bench-stat .k {
   font-size: 10px;
   text-transform: uppercase;
@@ -757,22 +1057,44 @@ button[class*="sm"] {
   background: var(--bg-elev);
   backdrop-filter: blur(var(--blur));
   -webkit-backdrop-filter: blur(var(--blur));
-  margin-top: 28px;
-}
-.chex-footer .sep { opacity: 0.5; }
-
-/* ── Output textboxes ── */
-.gradio-container .gr-textbox[data-testid],
-.gradio-container textarea[readonly] {
-  background: var(--bg-sunken) !important;
-  border: 1px solid var(--hairline) !important;
-  font-size: 13px !important;
-  line-height: 1.65 !important;
-  color: var(--fg) !important;
+  margin-top: 32px;
 }
 
-/* Scrollbars */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+.chex-footer .sep { opacity: 0.4; }
+
+/* ── Result label container ── */
+.chex-label-wrap {
+  padding: 4px 0 8px;
+}
+
+/* ── Divider ── */
+.chex-divider {
+  height: 1px;
+  background: var(--hairline);
+  margin: 18px 0;
+}
+
+/* ── Section kicker ── */
+.chex-section-kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-subtle);
+  margin-bottom: 10px;
+  display: block;
+}
+
+/* ── Card body padding ── */
+.chex-card-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Scrollbars ── */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 999px;
@@ -780,19 +1102,38 @@ button[class*="sm"] {
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Gradio utility gaps ── */
+.gradio-container .gap-4 { gap: 14px !important; }
+.gradio-container .gap-2 { gap: 8px !important; }
+
+/* Nested sub-tabs (bank statement) */
+.tabitem .tab-nav {
+  position: static !important;
+  top: auto !important;
+}
+
+/* Responsive spacing */
+@media (max-width: 900px) {
+  .chex-topbar { padding: 0 16px; }
+  .chex-tag { display: none; }
+  .tabitem { padding: 16px !important; }
+  .chex-bench-stats { grid-template-columns: 1fr; }
+  .chex-footer { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
+}
 """
+
+# ---------------------------------------------------------------------------
+# Static HTML strings
+# ---------------------------------------------------------------------------
 
 TOPBAR_HTML = """
 <div class="chex-topbar">
-  <div class="chex-brand">
-    <div class="chex-logo">CX</div>
-    <div class="chex-name">CHEX</div>
-    <div class="chex-tag">grounded answers from documents</div>
-  </div>
-  <div class="chex-status-pill">
-    <span class="chex-status-dot"></span>
-    <span>MI300X · ready</span>
-  </div>
+  <div class="chex-logo">CX</div>
+  <span class="chex-name">CHEX</span>
+  <span class="chex-tag">grounded answers from documents</span>
+  <div style="flex:1"></div>
+  <div class="chex-pill"><span class="chex-dot"></span>MI300X · ready</div>
 </div>
 """
 
@@ -820,151 +1161,165 @@ BENCH_INTRO_HTML = """
 </div>
 """
 
+CONTRACT_SOURCE_HEADER_HTML = """
+<div class="chex-card-header">
+  <span class="chex-card-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    Source Document
+  </span>
+  <span class="chex-card-kicker">paste · load sample</span>
+</div>
+"""
+
+CONTRACT_RESULTS_HEADER_HTML = """
+<div class="chex-card-header">
+  <span class="chex-card-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    Analysis
+  </span>
+  <span class="chex-card-kicker">grounded · cited · structured</span>
+</div>
+"""
+
+CHIP_ROW_HTML = """
+<div class="chex-chip-row">
+  <span class="chex-chip-label">Load sample</span>
+</div>
+"""
+
+STATEMENT_SOURCE_HEADER_HTML = """
+<div class="chex-card-header">
+  <span class="chex-card-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    Bank Statement
+  </span>
+  <span class="chex-card-kicker">paste · pdf · csv</span>
+</div>
+"""
+
+STATEMENT_RESULTS_HEADER_HTML = """
+<div class="chex-card-header">
+  <span class="chex-card-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Summary &amp; Q&amp;A
+  </span>
+  <span class="chex-card-kicker">summarise · ask · verify</span>
+</div>
+"""
+
+# ---------------------------------------------------------------------------
+# Gradio UI
+# ---------------------------------------------------------------------------
+
 with gr.Blocks(
-    title="CHEX - Document Intelligence",
+    title="CHEX — Document Intelligence",
     theme=gr.themes.Base(),
     css=CHEX_CSS,
 ) as demo:
+
+    # ── Topbar ──────────────────────────────────────────────────────────── #
     gr.HTML(TOPBAR_HTML)
 
+    # ── Warning banner (only if model failed) ───────────────────────────── #
     if WARNING_HTML:
         gr.HTML(WARNING_HTML)
 
+    # ── Tabs ────────────────────────────────────────────────────────────── #
     with gr.Tabs():
-        # ------------------------------------------------------------------ #
-        # Tab 1: Analyze Contract                                             #
-        # ------------------------------------------------------------------ #
-        with gr.Tab("Analyze Contract"):
-            with gr.Row():
-                # Left column: contract input
-                with gr.Column(scale=2):
-                    gr.Markdown("### Contract Text")
+
+        # ================================================================== #
+        # Tab 01 — Contract Analysis                                          #
+        # ================================================================== #
+        with gr.Tab("01  Contract analysis"):
+            with gr.Row(equal_height=False):
+
+                # ── Left panel: source document ──────────────────────────── #
+                with gr.Column(scale=9):
+                  with gr.Group():
+                    gr.HTML(CONTRACT_SOURCE_HEADER_HTML)
                     contract_input = gr.Textbox(
-                        label="Paste contract text here",
-                        lines=22,
-                        placeholder="Paste your contract text here, or load a sample contract below...",
+                        label="Contract text",
+                        lines=20,
+                        placeholder="Paste your contract text here, or load a sample below…",
                         show_label=False,
                     )
+                    gr.HTML(CHIP_ROW_HTML)
                     with gr.Row():
-                        btn_software = gr.Button("Load: Software License", size="sm")
-                        btn_nda = gr.Button("Load: NDA", size="sm")
-                        btn_service = gr.Button("Load: Service Agreement", size="sm")
+                        btn_software = gr.Button("Software License", variant="secondary", size="sm")
+                        btn_nda = gr.Button("NDA", variant="secondary", size="sm")
+                        btn_service = gr.Button("Service Agreement", variant="secondary", size="sm")
+                    suggested_q = gr.HTML(value="", visible=False)
 
-                # Right column: question + results
-                with gr.Column(scale=1):
-                    gr.Markdown("### Question")
-                    question_input = gr.Textbox(
-                        label="Question about the contract",
-                        placeholder="e.g., What is the limitation of liability?",
-                        lines=2,
-                        show_label=False,
-                    )
-                    analyze_btn = gr.Button(
-                        "Analyze",
-                        variant="primary",
-                        interactive=True,
-                    )
+                # ── Right panel: question + results ──────────────────────── #
+                with gr.Column(scale=11):
+                  with gr.Group():
+                    gr.HTML(CONTRACT_RESULTS_HEADER_HTML)
+                    with gr.Row():
+                        question_input = gr.Textbox(
+                            label="Question",
+                            placeholder="e.g., What is the limitation of liability?",
+                            lines=1,
+                            show_label=False,
+                            scale=8,
+                        )
+                        analyze_btn = gr.Button("Analyze ↵", variant="primary", scale=2)
+                    label_display = gr.HTML(value=format_label_html("N/A"))
+                    answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
+                    citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
+                    reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
 
-                    gr.Markdown("### Result")
-                    label_display = gr.HTML(
-                        value=format_label_html("N/A"),
-                        label="Classification",
-                    )
-                    answer_output = gr.Textbox(
-                        label="Answer",
-                        interactive=False,
-                        lines=3,
-                    )
-                    citation_output = gr.Textbox(
-                        label="Citation (verbatim from contract)",
-                        interactive=False,
-                        lines=3,
-                    )
-                    reasoning_output = gr.Textbox(
-                        label="Reasoning",
-                        interactive=False,
-                        lines=2,
-                    )
+        # ================================================================== #
+        # Tab 02 — Bank Statements                                            #
+        # ================================================================== #
+        with gr.Tab("02  Bank statements"):
+            with gr.Row(equal_height=False):
 
-            # Suggested questions shown when loading a sample
-            suggested_q = gr.Markdown("", visible=False)
-
-        # ------------------------------------------------------------------ #
-        # Tab 2: Analyse Bank Statement                                        #
-        # ------------------------------------------------------------------ #
-        with gr.Tab("Analyse Bank Statement"):
-            with gr.Row():
-                # Left column: statement input (3 sub-tabs)
-                with gr.Column(scale=2):
-                    gr.Markdown("### Bank Statement Input")
+                # ── Left panel: statement input ───────────────────────────── #
+                with gr.Column(scale=9):
+                  with gr.Group():
+                    gr.HTML(STATEMENT_SOURCE_HEADER_HTML)
                     with gr.Tabs():
-                        with gr.Tab("Paste Text"):
+                        with gr.Tab("Paste text"):
                             bank_paste_input = gr.Textbox(
-                                label="Paste bank statement text",
+                                label="Bank statement text",
                                 lines=20,
-                                placeholder="Paste your bank statement here, or load the sample below...",
+                                placeholder="Paste your bank statement here, or load the sample below…",
                                 show_label=False,
                             )
-                            btn_load_statement = gr.Button("Load Sample Statement", size="sm")
+                            btn_load_statement = gr.Button("Load sample statement", variant="secondary", size="sm")
                         with gr.Tab("Upload PDF"):
-                            bank_pdf_input = gr.File(
-                                label="Upload PDF bank statement",
-                                file_types=[".pdf"],
-                            )
+                            bank_pdf_input = gr.File(label="PDF bank statement", file_types=[".pdf"])
                         with gr.Tab("Upload CSV"):
-                            bank_csv_input = gr.File(
-                                label="Upload CSV bank statement",
-                                file_types=[".csv"],
-                            )
+                            bank_csv_input = gr.File(label="CSV bank statement", file_types=[".csv"])
 
-                # Right column: summary + Q&A
-                with gr.Column(scale=1):
-                    analyse_stmt_btn = gr.Button(
-                        "Analyse Statement",
-                        variant="primary",
-                    )
-                    summary_output = gr.Markdown(
-                        value="*Run 'Analyse Statement' to generate a financial summary.*"
-                    )
+                # ── Right panel: summary + Q&A ───────────────────────────── #
+                with gr.Column(scale=11):
+                  with gr.Group():
+                    gr.HTML(STATEMENT_RESULTS_HEADER_HTML)
+                    analyse_stmt_btn = gr.Button("Analyse statement", variant="primary")
+                    summary_output = gr.Markdown(value="*Run 'Analyse statement' to generate a financial summary.*")
+                    gr.HTML('<div class="chex-divider"></div>')
+                    gr.HTML('<span class="chex-section-kicker">Ask a question</span>')
+                    with gr.Row():
+                        bank_question_input = gr.Textbox(
+                            label="Question",
+                            placeholder="e.g., What was the largest debit this month?",
+                            lines=1,
+                            show_label=False,
+                            scale=8,
+                        )
+                        bank_ask_btn = gr.Button("Ask ↵", variant="secondary", scale=2)
+                    bank_label_display = gr.HTML(value=format_label_html("N/A"))
+                    bank_answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
+                    bank_citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
+                    bank_reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
 
-                    gr.Markdown("---")
-                    gr.Markdown("### Ask a Question")
-                    bank_question_input = gr.Textbox(
-                        label="Question about the statement",
-                        placeholder="e.g., What was the largest debit this month?",
-                        lines=2,
-                        show_label=False,
-                    )
-                    bank_ask_btn = gr.Button("Ask", variant="secondary")
-
-                    gr.Markdown("### Q&A Result")
-                    bank_label_display = gr.HTML(
-                        value=format_label_html("N/A"),
-                        label="Classification",
-                    )
-                    bank_answer_output = gr.Textbox(
-                        label="Answer",
-                        interactive=False,
-                        lines=3,
-                    )
-                    bank_citation_output = gr.Textbox(
-                        label="Citation (verbatim from statement)",
-                        interactive=False,
-                        lines=3,
-                    )
-                    bank_reasoning_output = gr.Textbox(
-                        label="Reasoning",
-                        interactive=False,
-                        lines=2,
-                    )
-
-            # Hidden state: extracted statement text shared between summary and Q&A
             bank_statement_state = gr.State("")
 
-        # ------------------------------------------------------------------ #
-        # Tab 2: Benchmark Demo                                               #
-        # ------------------------------------------------------------------ #
-        with gr.Tab("Benchmark Demo"):
+        # ================================================================== #
+        # Tab 03 — Benchmark                                                  #
+        # ================================================================== #
+        with gr.Tab("03  Benchmark"):
             gr.HTML(BENCH_INTRO_HTML)
             gr.Dataframe(
                 value=BENCHMARK_DF,
@@ -974,29 +1329,51 @@ with gr.Blocks(
                 interactive=False,
             )
 
-    # ------------------------------------------------------------------ #
-    # Event handlers                                                       #
-    # ------------------------------------------------------------------ #
+    # ── Footer ──────────────────────────────────────────────────────────── #
+    gr.HTML(FOOTER_HTML)
+
+    # ====================================================================== #
+    # Event handlers                                                          #
+    # ====================================================================== #
 
     def load_software():
+        hint = (
+            '<div class="chex-suggested">'
+            '<span class="chex-suggested-icon">💡</span>'
+            '<span><strong>Suggested:</strong> What is the limitation of liability in this agreement?</span>'
+            '</div>'
+        )
         return (
             SOFTWARE_LICENSE,
             SAMPLE_QUESTIONS["software_license.txt"],
-            gr.update(value="💡 **Suggested question:** What is the limitation of liability in this agreement?", visible=True),
+            gr.update(value=hint, visible=True),
         )
 
     def load_nda():
+        hint = (
+            '<div class="chex-suggested">'
+            '<span class="chex-suggested-icon">💡</span>'
+            '<span><strong>Suggested:</strong> Does this agreement include a non-compete clause?</span>'
+            '</div>'
+        )
         return (
             NDA,
             SAMPLE_QUESTIONS["nda.txt"],
-            gr.update(value="💡 **Suggested question:** Does this agreement include a non-compete clause?", visible=True),
+            gr.update(value=hint, visible=True),
         )
 
     def load_service():
+        hint = (
+            '<div class="chex-suggested">'
+            '<span class="chex-suggested-icon">💡</span>'
+            '<span><strong>Suggested:</strong> Does this contract include a termination for convenience clause? '
+            '<em>(expected: ABSENT)</em></span>'
+            '</div>'
+        )
         return (
             SERVICE_AGREEMENT,
             SAMPLE_QUESTIONS["service_agreement.txt"],
-            gr.update(value="💡 **Suggested question:** Does this contract include a termination for convenience clause? (expected: ABSENT)", visible=True),
+            gr.update(value=hint, visible=True),
         )
 
     btn_software.click(
@@ -1021,16 +1398,14 @@ with gr.Blocks(
         outputs=[label_display, answer_output, citation_output, reasoning_output],
     )
 
-    # Also trigger on Enter in question field
+    # Trigger on Enter in question field
     question_input.submit(
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
     )
 
-    # ------------------------------------------------------------------ #
-    # Bank Statement event handlers                                        #
-    # ------------------------------------------------------------------ #
+    # ── Bank Statement handlers ──────────────────────────────────────────── #
 
     btn_load_statement.click(
         fn=lambda: SAMPLE_STATEMENT,
@@ -1055,8 +1430,6 @@ with gr.Blocks(
         inputs=[bank_statement_state, bank_question_input],
         outputs=[bank_label_display, bank_answer_output, bank_citation_output, bank_reasoning_output],
     )
-
-    gr.HTML(FOOTER_HTML)
 
 
 if __name__ == "__main__":
