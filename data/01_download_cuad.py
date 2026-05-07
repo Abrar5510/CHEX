@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -41,11 +40,12 @@ def parse_args() -> argparse.Namespace:
 def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -> None:
     from datasets import load_dataset  # type: ignore
 
-    # theatticusproject/cuad (default config) now returns PDF-only rows.
-    # The SQuAD-style QA version lives at theatticusproject/cuad-qa.
-    print("Loading CUAD QA dataset from HuggingFace (theatticusproject/cuad-qa)...")
+    # theatticusproject/cuad returns PDF-only rows; theatticusproject/cuad-qa uses a
+    # legacy dataset script no longer supported. chenghao/cuad_qa is a parquet mirror
+    # with the same SQuAD-style schema (id, title, context, question, answers).
+    print("Loading CUAD QA dataset from HuggingFace (chenghao/cuad_qa)...")
     ds = load_dataset(
-        "theatticusproject/cuad-qa",
+        "chenghao/cuad_qa",
         split="train",
         cache_dir=str(cache_dir),
         verification_mode="no_checks",
