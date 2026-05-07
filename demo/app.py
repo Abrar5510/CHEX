@@ -31,19 +31,19 @@ STATEMENT_DIR = Path(__file__).parent / "sample_statements"
 analyzer = None
 model_load_error: Optional[str] = None
 
+bank_analyzer = None
+
 try:
     from serving.inference import ContractAnalyzer  # type: ignore
+    from serving.bank_statement import BankStatementAnalyzer  # type: ignore
 
     analyzer = ContractAnalyzer(model_path=MODEL_PATH)
+    bank_analyzer = BankStatementAnalyzer(contract_analyzer=analyzer)
     print(f"Model loaded successfully: {MODEL_PATH}")
 except Exception as e:
     model_load_error = str(e)
     print(f"WARNING: Model failed to load: {e}")
     print("Demo is running in preview mode — analysis will return a placeholder response.")
-
-# BankStatementAnalyzer reuses the loaded ContractAnalyzer pipeline
-from serving.bank_statement import BankStatementAnalyzer  # type: ignore
-bank_analyzer = BankStatementAnalyzer(contract_analyzer=analyzer)
 
 # ---------------------------------------------------------------------------
 # Sample contract content
@@ -159,6 +159,8 @@ def _get_statement_text(
     Priority: PDF > CSV > paste text.
     """
     if pdf_file is not None:
+        if bank_analyzer is None:
+            return "", "Model not loaded — PDF extraction unavailable."
         try:
             text = bank_analyzer.extract_text_from_pdf(pdf_file)
             if not text.strip():
@@ -168,6 +170,8 @@ def _get_statement_text(
             return "", f"PDF extraction error: {e}"
 
     if csv_file is not None:
+        if bank_analyzer is None:
+            return "", "Model not loaded — CSV parsing unavailable."
         try:
             text = bank_analyzer.parse_csv(csv_file)
             return text, ""
