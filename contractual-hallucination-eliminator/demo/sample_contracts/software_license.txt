@@ -1,0 +1,44 @@
+SOFTWARE LICENSE AGREEMENT
+
+This Software License Agreement ("Agreement") is entered into as of January 1, 2024 ("Effective Date"), by and between TechVision Inc., a Delaware corporation with its principal offices at 100 Innovation Drive, San Jose, California 94105 ("Licensor"), and GlobalCorp Ltd., a corporation organized under the laws of England and Wales, with its registered office at 25 King Street, London EC2V 8AU ("Licensee").
+
+1. GRANT OF LICENSE
+
+Subject to the terms and conditions of this Agreement, Licensor hereby grants to Licensee a non-exclusive, non-transferable, non-sublicensable license to install and use the software product known as "VisionSuite Pro" (the "Software"), solely for Licensee's internal business operations. Licensee shall not distribute, sell, resell, or make the Software available to any third party.
+
+2. INTELLECTUAL PROPERTY
+
+All right, title, and interest in and to the Software, including all intellectual property rights therein, shall remain exclusively with Licensor. Nothing in this Agreement shall be construed to transfer any ownership rights to Licensee. Licensee shall promptly notify Licensor of any suspected infringement of Licensor's intellectual property rights.
+
+3. LICENSE FEES
+
+Licensee shall pay Licensor an annual license fee of Twenty-Five Thousand Dollars ($25,000), due and payable within thirty (30) days of the Effective Date and each anniversary thereof. Fees are non-refundable. Late payments shall bear interest at the rate of one and one-half percent (1.5%) per month.
+
+4. TERM AND TERMINATION
+
+This Agreement shall commence on the Effective Date and continue for an initial term of two (2) years, unless earlier terminated. Either party may terminate this Agreement for cause upon thirty (30) days' written notice if the other party materially breaches any provision hereof and fails to cure such breach within the notice period. Upon termination, Licensee shall immediately cease all use of the Software and certify destruction of all copies.
+
+5. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL LICENSOR BE LIABLE TO LICENSEE OR ANY THIRD PARTY FOR ANY INDIRECT, INCIDENTAL, SPECIAL, PUNITIVE, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR RELATED TO THIS AGREEMENT OR THE USE OF THE SOFTWARE, INCLUDING LOST PROFITS, LOSS OF DATA, OR BUSINESS INTERRUPTION, EVEN IF LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+LICENSOR'S TOTAL CUMULATIVE LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT SHALL NOT EXCEED FIFTY THOUSAND DOLLARS ($50,000) OR THE TOTAL FEES PAID BY LICENSEE TO LICENSOR IN THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE CLAIM, WHICHEVER IS LESSER.
+
+6. WARRANTIES AND DISCLAIMERS
+
+Licensor warrants that, for a period of ninety (90) days following the Effective Date, the Software will perform substantially in accordance with its accompanying documentation. EXCEPT FOR THE FOREGOING LIMITED WARRANTY, THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+7. CONFIDENTIALITY
+
+Each party agrees to maintain the confidentiality of the other party's proprietary information and not to disclose such information to any third party without prior written consent. This obligation shall survive termination of this Agreement for a period of three (3) years.
+
+8. GOVERNING LAW
+
+This Agreement shall be governed by and construed in accordance with the laws of the State of California, without regard to its conflict-of-laws provisions. Any disputes shall be resolved in the state or federal courts located in Santa Clara County, California.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.
+
+TECHVISION INC.                         GLOBALCORP LTD.
+By: ____________________               By: ____________________
+Name: Sarah Chen                        Name: James Harrington
+Title: Chief Executive Officer          Title: Managing Director

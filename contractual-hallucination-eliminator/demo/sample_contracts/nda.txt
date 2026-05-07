@@ -1,0 +1,46 @@
+NON-DISCLOSURE AND NON-COMPETE AGREEMENT
+
+This Non-Disclosure and Non-Compete Agreement ("Agreement") is entered into as of March 15, 2024 ("Effective Date"), between AlphaTech Solutions LLC, a California limited liability company ("Disclosing Party"), and Beta Dynamics Corp., a Texas corporation ("Receiving Party"), collectively referred to as the "Parties."
+
+RECITALS
+
+The Disclosing Party possesses certain confidential and proprietary information relating to its software development methodologies, customer lists, trade secrets, business strategies, and financial data (collectively, "Confidential Information"). The Parties desire to enter into discussions regarding a potential strategic partnership and wish to protect the Disclosing Party's Confidential Information during and after such discussions.
+
+1. DEFINITION OF CONFIDENTIAL INFORMATION
+
+"Confidential Information" means any and all information disclosed by the Disclosing Party to the Receiving Party, whether in oral, written, electronic, or any other form, that is designated as confidential or that reasonably should be understood to be confidential given the nature of the information and the circumstances of disclosure. Confidential Information includes, but is not limited to, technical data, trade secrets, know-how, research, product plans, products, services, customer lists, markets, software, and financial data.
+
+2. NON-DISCLOSURE OBLIGATIONS
+
+The Receiving Party shall: (a) hold all Confidential Information in strict confidence; (b) not disclose Confidential Information to any third party without the prior written consent of the Disclosing Party; (c) use Confidential Information solely for the purpose of evaluating the potential partnership; and (d) limit access to Confidential Information to employees who have a need to know and are bound by confidentiality obligations no less restrictive than those contained herein.
+
+3. NON-COMPETE CLAUSE
+
+During the term of this Agreement and for a period of two (2) years thereafter, the Receiving Party shall not, directly or indirectly, engage in, own, manage, operate, control, be employed by, provide services to, participate in, or be connected with any business activity that directly competes with the Disclosing Party's primary business operations in the geographic markets where the Disclosing Party currently operates or has documented plans to operate.
+
+The Receiving Party further agrees not to solicit, hire, or attempt to hire any employee or contractor of the Disclosing Party during the same two (2) year period.
+
+4. TERM
+
+This Agreement shall commence on the Effective Date and remain in effect for a period of three (3) years from the date of execution, unless earlier terminated by mutual written consent of both Parties.
+
+5. RETURN OF INFORMATION
+
+Upon request by the Disclosing Party or upon termination of this Agreement, the Receiving Party shall promptly return or certify the destruction of all materials containing Confidential Information, including all copies, extracts, and summaries thereof.
+
+6. EXCEPTIONS
+
+The obligations under this Agreement shall not apply to information that: (a) is or becomes publicly available through no act of the Receiving Party; (b) was in the Receiving Party's possession prior to disclosure; (c) is independently developed by the Receiving Party without reference to the Confidential Information; or (d) is required to be disclosed by law or court order, provided that the Receiving Party gives prompt written notice to the Disclosing Party.
+
+7. REMEDIES
+
+The Receiving Party acknowledges that any breach of this Agreement may cause irreparable harm for which monetary damages would be an inadequate remedy. Accordingly, the Disclosing Party shall be entitled to seek injunctive relief in addition to all other remedies available at law or in equity.
+
+8. GOVERNING LAW
+
+This Agreement shall be governed by the laws of the State of California.
+
+ALPHATECH SOLUTIONS LLC               BETA DYNAMICS CORP.
+By: ____________________             By: ____________________
+Name: Dr. Priya Nair                 Name: Robert T. Caldwell
+Title: Chief Technology Officer      Title: President

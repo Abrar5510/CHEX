@@ -1,0 +1,30 @@
+model_name: "Qwen/Qwen3.5-9B"
+
+# LoRA configuration
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+target_modules:
+  - "q_proj"
+  - "v_proj"
+  - "k_proj"
+  - "o_proj"
+
+# Training hyperparameters
+learning_rate: 2.0e-4
+num_epochs: 3
+batch_size: 4
+gradient_accumulation_steps: 4
+max_seq_length: 4096
+bf16: true
+
+# Checkpointing
+output_dir: "./checkpoints"
+save_total_limit: 3
+
+# HuggingFace Hub (set HF_TOKEN env var to enable)
+hub_model_id: "PLACEHOLDER/contractual-hallucination-eliminator"
+
+# Whether to include CONTRADICTS_PRIOR class during evaluation
+# When false, evaluation is restricted to GROUNDED / ABSENT (2-class)
+use_contradicts_prior: false

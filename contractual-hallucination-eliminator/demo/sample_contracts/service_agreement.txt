@@ -1,0 +1,54 @@
+PROFESSIONAL SERVICES AGREEMENT
+
+This Professional Services Agreement ("Agreement") is entered into as of February 1, 2024 ("Effective Date"), by and between Apex Consulting Group, Inc., a New York corporation with offices at 500 Fifth Avenue, New York, NY 10110 ("Service Provider"), and Meridian Enterprises, LLC, a Delaware limited liability company with offices at 2200 Corporate Blvd, Boca Raton, FL 33431 ("Client").
+
+1. SCOPE OF SERVICES
+
+Service Provider agrees to provide Client with strategic management consulting services as described in Exhibit A attached hereto ("Services"). Service Provider shall assign qualified personnel to perform the Services and shall complete all deliverables in accordance with the timelines specified in Exhibit A. Any changes to the scope of Services must be agreed upon in writing by both Parties.
+
+2. PAYMENT TERMS
+
+Client shall pay Service Provider a monthly retainer fee of Five Thousand Dollars ($5,000) per month. Payment is due and payable on the first business day of each calendar month. Client shall reimburse Service Provider for all pre-approved out-of-pocket expenses within fifteen (15) days of receipt of an itemized invoice. Any amounts not paid within thirty (30) days of the due date shall accrue interest at one percent (1%) per month.
+
+3. TERM
+
+This Agreement shall commence on the Effective Date and continue for an initial period of twelve (12) months. Thereafter, this Agreement shall automatically renew for successive twelve (12)-month periods unless either Party provides written notice of non-renewal at least sixty (60) days prior to the end of the then-current term.
+
+4. TERMINATION FOR CAUSE
+
+Either Party may terminate this Agreement upon thirty (30) days' prior written notice to the other Party if the other Party: (a) materially breaches any provision of this Agreement and fails to cure such breach within the thirty (30)-day notice period; (b) becomes insolvent, makes an assignment for the benefit of creditors, or is subject to any bankruptcy or insolvency proceeding; or (c) ceases to conduct business in the ordinary course.
+
+Upon termination, Client shall pay Service Provider for all Services performed up to the date of termination and all non-cancellable expenses incurred by Service Provider through the termination date.
+
+5. INDEPENDENT CONTRACTOR
+
+Service Provider is an independent contractor and not an employee of Client. Nothing in this Agreement shall create a partnership, joint venture, or employment relationship between the Parties. Service Provider shall be solely responsible for all taxes, insurance, and benefits of its employees.
+
+6. INTELLECTUAL PROPERTY
+
+All work product, deliverables, and materials developed by Service Provider specifically for Client under this Agreement shall, upon full payment by Client, become the property of Client. Service Provider retains all right, title, and interest in and to its pre-existing tools, methodologies, frameworks, and know-how.
+
+7. CONFIDENTIALITY
+
+Each Party agrees to maintain the confidentiality of the other Party's proprietary business information disclosed in connection with this Agreement. This obligation shall survive the termination of this Agreement for a period of two (2) years.
+
+8. INDEMNIFICATION
+
+Each Party shall indemnify, defend, and hold harmless the other Party from and against any claims, damages, and expenses arising from such Party's gross negligence or willful misconduct in connection with this Agreement.
+
+9. LIMITATION OF LIABILITY
+
+NEITHER PARTY SHALL BE LIABLE TO THE OTHER FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE DAMAGES. EACH PARTY'S TOTAL LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE TOTAL FEES PAID OR PAYABLE BY CLIENT TO SERVICE PROVIDER IN THE THREE (3) MONTHS IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO THE CLAIM.
+
+10. GOVERNING LAW
+
+This Agreement shall be governed by the laws of the State of New York, without regard to conflict-of-laws principles. Disputes shall be submitted to binding arbitration in New York City under the rules of the American Arbitration Association.
+
+[Note: This agreement contains termination for cause provisions only. There is no termination for convenience clause — neither party may terminate this agreement without cause during the initial term.]
+
+IN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective Date.
+
+APEX CONSULTING GROUP, INC.            MERIDIAN ENTERPRISES, LLC
+By: ____________________              By: ____________________
+Name: Amanda J. Whitfield             Name: Carlos Reyes
+Title: Managing Partner               Title: Chief Operating Officer

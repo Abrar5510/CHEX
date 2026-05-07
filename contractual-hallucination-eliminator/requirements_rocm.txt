@@ -1,0 +1,34 @@
+# AMD ROCm setup for CHEX
+#
+# Step 1: Install ROCm-enabled PyTorch FIRST (before this file):
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
+#
+# Step 2: Install remaining dependencies:
+#   pip install -r requirements_rocm.txt
+#
+# Notes on bitsandbytes with ROCm:
+#   - Official bitsandbytes ROCm support is experimental.
+#   - The training script automatically detects AMD GPUs and falls back to fp16
+#     if bitsandbytes is unavailable.
+#   - To try the ROCm bitsandbytes build:
+#     pip install bitsandbytes --extra-index-url https://huggingface.github.io/bitsandbytes-rocm/
+#
+# AMD MI300X note:
+#   - MI300X natively supports bf16; if your ROCm build is stable with bf16,
+#     edit training/config.yaml and set bf16: true, and update the is_rocm check
+#     in training/train.py accordingly.
+
+transformers>=4.45.0
+peft>=0.12.0
+trl>=0.11.0
+datasets>=2.20.0
+gradio>=4.40.0
+pydantic>=2.0.0
+accelerate>=0.33.0
+huggingface_hub>=0.24.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+PyYAML>=6.0
+pandas>=2.0.0
+wandb>=0.17.0
+# torch is excluded — install via ROCm wheel URL above
