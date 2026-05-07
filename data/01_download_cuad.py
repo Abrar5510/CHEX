@@ -43,9 +43,8 @@ def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -
 
     print("Loading CUAD dataset from HuggingFace (theatticusproject/cuad)...")
     ds = load_dataset(
-    "theatricusproject/cuad",
+    "theatticusproject/cuad",
     split="train",
-    trust_remote_code=True,
     cache_dir=str(cache_dir),
     verification_mode="no_checks",
     )
