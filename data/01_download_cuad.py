@@ -41,36 +41,17 @@ def parse_args() -> argparse.Namespace:
 def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -> None:
     from datasets import load_dataset  # type: ignore
 
-    # theatticusproject/cuad has two configs:
-    #   default  — the original SQuAD-style QA rows (id, context, question, answers)
-    #   cuad_raw — PDF-only rows (pdf key only)
-    # Try the SQuAD-style config first, then fall back to the plain "cuad" dataset.
-    print("Loading CUAD dataset from HuggingFace...")
-    ds = None
-    # Try the SQuAD-style split directly
-    try:
-        ds = load_dataset(
-            "theatticusproject/cuad",
-            split="train",
-            cache_dir=str(cache_dir),
-            verification_mode="no_checks",
-        )
-        # Peek at first row to detect the PDF-only schema
-        first = ds[0]
-        print(f"Row keys: {list(first.keys())}")
-        if list(first.keys()) == ["pdf"]:
-            raise ValueError("Dataset returned PDF-only schema; switching to cuad QA config.")
-    except Exception as e:
-        print(f"  Primary load failed ({e}); trying alternative config...")
-        ds = load_dataset(
-            "theatticusproject/cuad",
-            "cuad_qa",
-            split="train",
-            cache_dir=str(cache_dir),
-            verification_mode="no_checks",
-        )
-        first = ds[0]
-        print(f"Row keys (alt config): {list(first.keys())}")
+    # theatticusproject/cuad (default config) now returns PDF-only rows.
+    # The SQuAD-style QA version lives at theatticusproject/cuad-qa.
+    print("Loading CUAD QA dataset from HuggingFace (theatticusproject/cuad-qa)...")
+    ds = load_dataset(
+        "theatticusproject/cuad-qa",
+        split="train",
+        cache_dir=str(cache_dir),
+        verification_mode="no_checks",
+    )
+    first = ds[0]
+    print(f"Row keys: {list(first.keys())}")
 
     print(f"Dataset loaded: {len(ds)} total rows")
 
