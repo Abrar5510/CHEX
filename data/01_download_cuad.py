@@ -41,13 +41,37 @@ def parse_args() -> argparse.Namespace:
 def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -> None:
     from datasets import load_dataset  # type: ignore
 
-    print("Loading CUAD dataset from HuggingFace (theatticusproject/cuad)...")
-    ds = load_dataset(
-    "theatticusproject/cuad",
-    split="train",
-    cache_dir=str(cache_dir),
-    verification_mode="no_checks",
-    )
+    # theatticusproject/cuad has two configs:
+    #   default  — the original SQuAD-style QA rows (id, context, question, answers)
+    #   cuad_raw — PDF-only rows (pdf key only)
+    # Try the SQuAD-style config first, then fall back to the plain "cuad" dataset.
+    print("Loading CUAD dataset from HuggingFace...")
+    ds = None
+    # Try the SQuAD-style split directly
+    try:
+        ds = load_dataset(
+            "theatticusproject/cuad",
+            split="train",
+            cache_dir=str(cache_dir),
+            verification_mode="no_checks",
+        )
+        # Peek at first row to detect the PDF-only schema
+        first = ds[0]
+        print(f"Row keys: {list(first.keys())}")
+        if list(first.keys()) == ["pdf"]:
+            raise ValueError("Dataset returned PDF-only schema; switching to cuad QA config.")
+    except Exception as e:
+        print(f"  Primary load failed ({e}); trying alternative config...")
+        ds = load_dataset(
+            "theatticusproject/cuad",
+            "cuad_qa",
+            split="train",
+            cache_dir=str(cache_dir),
+            verification_mode="no_checks",
+        )
+        first = ds[0]
+        print(f"Row keys (alt config): {list(first.keys())}")
+
     print(f"Dataset loaded: {len(ds)} total rows")
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -61,9 +85,6 @@ def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -
         for i, row in enumerate(ds):
             if max_examples is not None and i >= max_examples:
                 break
-
-            if i == 0:
-                print(f"Row keys: {list(row.keys())}")
 
             # Handle both nested-dict schema {"answers": {"text": [...], "answer_start": [...]}}
             # and flat schema with direct "answer" / "answer_start" columns.
@@ -80,10 +101,13 @@ def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -
                 answer_text = None
                 answer_start = None
 
+            row_id = row.get("id") or row.get("uid") or str(i)
+            context = row.get("context") or row.get("contract_text") or ""
+
             example = RawCUADExample(
-                contract_id=row["id"],
-                contract_text=row["context"],
-                question=row["question"],
+                contract_id=row_id,
+                contract_text=context,
+                question=row.get("question", ""),
                 answer_text=answer_text,
                 answer_start=answer_start,
             )
@@ -97,7 +121,7 @@ def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -
                 without_answers += 1
 
             # Extract contract title from the id field (format: "ContractTitle__QuestionType__N")
-            title = row["id"].split("__")[0] if "__" in row["id"] else row["id"]
+            title = row_id.split("__")[0] if "__" in row_id else row_id
             contract_titles.add(title)
 
             if total % 5000 == 0:
