@@ -1,0 +1,35 @@
+GREENFIELD BANK — PERSONAL CURRENT ACCOUNT
+Account Holder: Jane A. Smith
+Account Number: 12-34-56  78901234
+Statement Period: 01 April 2025 – 30 April 2025
+
+Opening Balance: £1,200.00
+
+Date        Description                          Credits      Debits       Balance
+---------------------------------------------------------------------------
+03 Apr 25   BACS SALARY - ACME SOLUTIONS LTD    £2,500.00                 £3,700.00
+05 Apr 25   DIRECT DEBIT - NETFLIX.COM                        £9.99        £3,690.01
+07 Apr 25   CARD PMT - TESCO SUPERSTORE                       £87.50       £3,602.51
+10 Apr 25   DIRECT DEBIT - VIRGIN GYM                        £35.00       £3,567.51
+12 Apr 25   CARD PMT - AMAZON UK                             £142.30       £3,425.21
+15 Apr 25   ATM CASH WITHDRAWAL - HIGH ST                    £200.00       £3,225.21
+18 Apr 25   CARD PMT - COSTA COFFEE                           £4.75        £3,220.46
+20 Apr 25   STANDING ORDER - BARCLAYS MORTGAGE               £850.00       £2,370.46
+22 Apr 25   DIRECT DEBIT - SPOTIFY                            £9.99        £2,360.47
+24 Apr 25   CARD PMT - SAINSBURY'S SUPERSTORE                £63.20        £2,297.27
+25 Apr 25   BANK TRANSFER IN - J. SMITH                £300.00             £2,597.27
+28 Apr 25   CARD PMT - ZARA CLOTHING                          £55.00       £2,542.27
+29 Apr 25   DIRECT DEBIT - SKY TV                            £42.00        £2,500.27
+30 Apr 25   ATM CASH WITHDRAWAL - AIRPORT                    £500.00       £2,000.27
+---------------------------------------------------------------------------
+Closing Balance: £2,000.27
+
+Total Credits:  £2,800.00
+Total Debits:   £1,999.73
+
+Suggested questions to try:
+- What was the total salary received this month?
+- Are there any recurring subscription payments?
+- Was there a mortgage payment this month?
+- What was the largest single transaction?
+- Is there a phone bill in this statement?

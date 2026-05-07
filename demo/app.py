@@ -4,6 +4,7 @@ HuggingFace Spaces Gradio Demo
 
 Tab 1: Analyze Contract — paste a contract, ask a question, get a structured answer
 Tab 2: Benchmark Demo — side-by-side table showing base model hallucinations vs CHEX
+Tab 3: Analyse Bank Statement — paste / upload a bank statement, get a summary + Q&A
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ MODEL_PATH = os.environ.get(
     "HF_MODEL_REPO", "PLACEHOLDER/contractual-hallucination-eliminator"
 )
 SAMPLE_DIR = Path(__file__).parent / "sample_contracts"
+STATEMENT_DIR = Path(__file__).parent / "sample_statements"
 
 analyzer = None
 model_load_error: Optional[str] = None
@@ -38,6 +40,10 @@ except Exception as e:
     model_load_error = str(e)
     print(f"WARNING: Model failed to load: {e}")
     print("Demo is running in preview mode — analysis will return a placeholder response.")
+
+# BankStatementAnalyzer reuses the loaded ContractAnalyzer pipeline
+from serving.bank_statement import BankStatementAnalyzer  # type: ignore
+bank_analyzer = BankStatementAnalyzer(contract_analyzer=analyzer)
 
 # ---------------------------------------------------------------------------
 # Sample contract content
@@ -125,6 +131,125 @@ def analyze_contract(
         citation = result.citation if result.citation else "(none)"
         reasoning = result.reasoning
         return label_html, answer, citation, reasoning
+    except Exception as e:
+        return format_label_html("ERROR"), "", "", f"Inference error: {e}"
+
+
+# ---------------------------------------------------------------------------
+# Sample bank statement
+# ---------------------------------------------------------------------------
+
+def _read_sample_statement(filename: str) -> str:
+    p = STATEMENT_DIR / filename
+    if p.exists():
+        return p.read_text(encoding="utf-8")
+    return f"[Sample statement '{filename}' not found. Place it in demo/sample_statements/]"
+
+
+SAMPLE_STATEMENT = _read_sample_statement("sample_statement.txt")
+
+
+# ---------------------------------------------------------------------------
+# Bank statement handlers
+# ---------------------------------------------------------------------------
+
+def _get_statement_text(
+    paste_text: str,
+    pdf_file,
+    csv_file,
+) -> tuple[str, str]:
+    """
+    Resolve whichever input was provided and return (statement_text, error_msg).
+    Priority: PDF > CSV > paste text.
+    """
+    if pdf_file is not None:
+        try:
+            text = bank_analyzer.extract_text_from_pdf(pdf_file)
+            if not text.strip():
+                return "", "PDF was uploaded but no text could be extracted."
+            return text, ""
+        except Exception as e:
+            return "", f"PDF extraction error: {e}"
+
+    if csv_file is not None:
+        try:
+            text = bank_analyzer.parse_csv(csv_file)
+            return text, ""
+        except Exception as e:
+            return "", f"CSV parsing error: {e}"
+
+    if paste_text and paste_text.strip():
+        return paste_text.strip(), ""
+
+    return "", "Please paste a bank statement or upload a PDF / CSV file."
+
+
+def analyse_bank_statement(
+    paste_text: str,
+    pdf_file,
+    csv_file,
+) -> tuple[str, str]:
+    """
+    Returns (summary_markdown, extracted_text_for_qa).
+    """
+    statement_text, error = _get_statement_text(paste_text, pdf_file, csv_file)
+    if error:
+        return f"**Error:** {error}", ""
+
+    if analyzer is None:
+        return (
+            "**Model not loaded.** "
+            f"Set `HF_MODEL_REPO` in Space secrets. Error: {model_load_error}",
+            statement_text,
+        )
+
+    try:
+        summary = bank_analyzer.summarize(statement_text)
+        lines = ["## Statement Summary", ""]
+        lines.append(f"**Total Credits:** {summary.total_credits or 'N/A'}")
+        lines.append(f"**Total Debits:** {summary.total_debits or 'N/A'}")
+        lines.append(f"**Largest Transaction:** {summary.largest_transaction or 'N/A'}")
+        if summary.recurring_payments:
+            lines.append("\n**Recurring Payments:**")
+            for p in summary.recurring_payments:
+                lines.append(f"- {p}")
+        if summary.flags:
+            lines.append("\n**Flags / Unusual Activity:**")
+            for f in summary.flags:
+                lines.append(f"- {f}")
+        lines.append(f"\n*{summary.raw_reasoning}*")
+        return "\n".join(lines), statement_text
+    except Exception as e:
+        return f"**Summarisation error:** {e}", statement_text
+
+
+def bank_qa(
+    statement_text: str,
+    question: str,
+) -> tuple[str, str, str, str]:
+    """
+    Returns (label_html, answer_text, citation_text, reasoning_text).
+    """
+    if not statement_text.strip():
+        return (
+            format_label_html("N/A"), "", "",
+            "Please run 'Analyse Statement' first to load the statement.",
+        )
+    if not question.strip():
+        return format_label_html("N/A"), "", "", "Please enter a question."
+
+    if analyzer is None:
+        return (
+            format_label_html("N/A"), "Model not loaded", "",
+            f"Model failed to load: {model_load_error}.",
+        )
+
+    try:
+        result = bank_analyzer.answer_question(statement_text, question)
+        label_html = format_label_html(result.label.value)
+        answer = result.answer if result.answer else "(none — information not found in statement)"
+        citation = result.citation if result.citation else "(none)"
+        return label_html, answer, citation, result.reasoning
     except Exception as e:
         return format_label_html("ERROR"), "", "", f"Inference error: {e}"
 
@@ -266,6 +391,78 @@ with gr.Blocks(
             suggested_q = gr.Markdown("", visible=False)
 
         # ------------------------------------------------------------------ #
+        # Tab 2: Analyse Bank Statement                                        #
+        # ------------------------------------------------------------------ #
+        with gr.Tab("Analyse Bank Statement"):
+            with gr.Row():
+                # Left column: statement input (3 sub-tabs)
+                with gr.Column(scale=2):
+                    gr.Markdown("### Bank Statement Input")
+                    with gr.Tabs():
+                        with gr.Tab("Paste Text"):
+                            bank_paste_input = gr.Textbox(
+                                label="Paste bank statement text",
+                                lines=20,
+                                placeholder="Paste your bank statement here, or load the sample below...",
+                                show_label=False,
+                            )
+                            btn_load_statement = gr.Button("Load Sample Statement", size="sm")
+                        with gr.Tab("Upload PDF"):
+                            bank_pdf_input = gr.File(
+                                label="Upload PDF bank statement",
+                                file_types=[".pdf"],
+                            )
+                        with gr.Tab("Upload CSV"):
+                            bank_csv_input = gr.File(
+                                label="Upload CSV bank statement",
+                                file_types=[".csv"],
+                            )
+
+                # Right column: summary + Q&A
+                with gr.Column(scale=1):
+                    analyse_stmt_btn = gr.Button(
+                        "Analyse Statement",
+                        variant="primary",
+                    )
+                    summary_output = gr.Markdown(
+                        value="*Run 'Analyse Statement' to generate a financial summary.*"
+                    )
+
+                    gr.Markdown("---")
+                    gr.Markdown("### Ask a Question")
+                    bank_question_input = gr.Textbox(
+                        label="Question about the statement",
+                        placeholder="e.g., What was the largest debit this month?",
+                        lines=2,
+                        show_label=False,
+                    )
+                    bank_ask_btn = gr.Button("Ask", variant="secondary")
+
+                    gr.Markdown("### Q&A Result")
+                    bank_label_display = gr.HTML(
+                        value=format_label_html("N/A"),
+                        label="Classification",
+                    )
+                    bank_answer_output = gr.Textbox(
+                        label="Answer",
+                        interactive=False,
+                        lines=3,
+                    )
+                    bank_citation_output = gr.Textbox(
+                        label="Citation (verbatim from statement)",
+                        interactive=False,
+                        lines=3,
+                    )
+                    bank_reasoning_output = gr.Textbox(
+                        label="Reasoning",
+                        interactive=False,
+                        lines=2,
+                    )
+
+            # Hidden state: extracted statement text shared between summary and Q&A
+            bank_statement_state = gr.State("")
+
+        # ------------------------------------------------------------------ #
         # Tab 2: Benchmark Demo                                               #
         # ------------------------------------------------------------------ #
         with gr.Tab("Benchmark Demo"):
@@ -347,6 +544,34 @@ with gr.Blocks(
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
+    )
+
+    # ------------------------------------------------------------------ #
+    # Bank Statement event handlers                                        #
+    # ------------------------------------------------------------------ #
+
+    btn_load_statement.click(
+        fn=lambda: SAMPLE_STATEMENT,
+        inputs=[],
+        outputs=[bank_paste_input],
+    )
+
+    analyse_stmt_btn.click(
+        fn=analyse_bank_statement,
+        inputs=[bank_paste_input, bank_pdf_input, bank_csv_input],
+        outputs=[summary_output, bank_statement_state],
+    )
+
+    bank_ask_btn.click(
+        fn=bank_qa,
+        inputs=[bank_statement_state, bank_question_input],
+        outputs=[bank_label_display, bank_answer_output, bank_citation_output, bank_reasoning_output],
+    )
+
+    bank_question_input.submit(
+        fn=bank_qa,
+        inputs=[bank_statement_state, bank_question_input],
+        outputs=[bank_label_display, bank_answer_output, bank_citation_output, bank_reasoning_output],
     )
 
 

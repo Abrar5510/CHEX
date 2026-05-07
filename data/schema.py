@@ -57,6 +57,17 @@ class ModelOutput(BaseModel):
     reasoning: str
 
 
+class BankStatementSummary(BaseModel):
+    """Structured summary extracted from a bank statement."""
+
+    total_credits: Optional[str] = None
+    total_debits: Optional[str] = None
+    largest_transaction: Optional[str] = None
+    recurring_payments: Optional[list[str]] = None
+    flags: Optional[list[str]] = None
+    raw_reasoning: str
+
+
 class BenchmarkResult(BaseModel):
     """Per-example result recorded during evaluation."""
 
