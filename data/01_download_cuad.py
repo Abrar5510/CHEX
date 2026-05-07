@@ -62,12 +62,23 @@ def download_and_save(output: Path, cache_dir: Path, max_examples: int | None) -
             if max_examples is not None and i >= max_examples:
                 break
 
-            answers = row["answers"]
-            answer_texts: list[str] = answers["text"]
-            answer_starts: list[int] = answers["answer_start"]
+            if i == 0:
+                print(f"Row keys: {list(row.keys())}")
 
-            answer_text = answer_texts[0] if answer_texts else None
-            answer_start = answer_starts[0] if answer_starts else None
+            # Handle both nested-dict schema {"answers": {"text": [...], "answer_start": [...]}}
+            # and flat schema with direct "answer" / "answer_start" columns.
+            if "answers" in row:
+                answers = row["answers"]
+                answer_texts: list[str] = answers["text"]
+                answer_starts: list[int] = answers["answer_start"]
+                answer_text = answer_texts[0] if answer_texts else None
+                answer_start = answer_starts[0] if answer_starts else None
+            elif "answer" in row:
+                answer_text = row["answer"] or None
+                answer_start = row.get("answer_start") or None
+            else:
+                answer_text = None
+                answer_start = None
 
             example = RawCUADExample(
                 contract_id=row["id"],
