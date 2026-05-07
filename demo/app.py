@@ -1,5 +1,5 @@
 """
-CHEX — Contractual Hallucination Eliminator
+CHEX - Document Intelligence
 HuggingFace Spaces Gradio Demo
 
 Tab 1: Analyze Contract — paste a contract, ask a question, get a structured answer
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # ---------------------------------------------------------------------------
 
 MODEL_PATH = os.environ.get(
-    "HF_MODEL_REPO", "PLACEHOLDER/contractual-hallucination-eliminator"
+    "HF_MODEL_REPO", "PLACEHOLDER/chex-document-intelligence"
 )
 SAMPLE_DIR = Path(__file__).parent / "sample_contracts"
 STATEMENT_DIR = Path(__file__).parent / "sample_statements"
@@ -316,15 +316,15 @@ if model_load_error:
     )
 
 with gr.Blocks(
-    title="CHEX — Contractual Hallucination Eliminator",
+    title="CHEX - Document Intelligence",
     theme=gr.themes.Soft(),
 ) as demo:
     gr.Markdown(
-        "# CHEX — Contractual Hallucination Eliminator\n"
+        "# CHEX - Document Intelligence\n"
         "**Fine-tuned Qwen3.5-9B on AMD MI300X (ROCm)** — "
-        "detects hallucinations in contract analysis with calibrated uncertainty signals.\n\n"
+        "detects hallucinations in document analysis with calibrated uncertainty signals.\n\n"
         "Instead of confidently fabricating answers, CHEX outputs one of three structured labels: "
-        "**GROUNDED** (answer exists), **ABSENT** (clause not present), or "
+        "**GROUNDED** (answer exists), **ABSENT** (information not present), or "
         "**CONTRADICTS_PRIOR** (terms deviate from standard)."
     )
 

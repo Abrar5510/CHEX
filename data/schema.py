@@ -1,4 +1,4 @@
-"""Pydantic v2 models for CHEX — Contractual Hallucination Eliminator."""
+"""Pydantic v2 models for CHEX - Document Intelligence."""
 
 from __future__ import annotations
 

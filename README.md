@@ -1,6 +1,6 @@
-# CHEX — Contractual Hallucination Eliminator
+# CHEX - Document Intelligence
 
-CHEX is a fine-tuned Qwen3.5-9B model trained on AMD MI300X (ROCm) to produce **calibrated uncertainty signals** when answering questions about legal contracts. Instead of confidently fabricating answers, CHEX outputs a structured JSON object that explicitly signals whether the requested information is present, absent, or contradicts standard terms — eliminating the hallucination problem that plagues off-the-shelf LLMs in legal document analysis.
+CHEX is a fine-tuned Qwen3.5-9B model trained on AMD MI300X (ROCm) to produce **calibrated uncertainty signals** when answering questions about legal documents. Instead of confidently fabricating answers, CHEX outputs a structured JSON object that explicitly signals whether the requested information is present, absent, or contradicts standard terms — eliminating the hallucination problem that plagues off-the-shelf LLMs in document analysis.
 
 ---
 
@@ -70,7 +70,7 @@ checkpoints/final/ ────────────────► HuggingFa
 ```bash
 # Clone the repository
 git clone https://github.com/Abrar5510/CHEX
-cd CHEX/contractual-hallucination-eliminator
+cd CHEX
 
 # Install dependencies
 pip install -r requirements.txt
@@ -166,7 +166,7 @@ python demo/app.py
 ## Project Structure
 
 ```
-contractual-hallucination-eliminator/
+CHEX/
 ├── data/
 │   ├── schema.py                   # Pydantic v2 models (Label, LabeledQAExample, etc.)
 │   ├── 01_download_cuad.py         # Download CUAD from HuggingFace
@@ -202,3 +202,7 @@ Apache 2.0 — see [LICENSE](LICENSE) for details.
 ## AMD Fine-Tuning Hackathon — Track 2
 
 Built for the AMD Fine-Tuning Hackathon. Fine-tuning performed on AMD MI300X GPU using ROCm. All data generation is fully local and deterministic (no external AI API calls). The complete pipeline from raw CUAD data to a deployed Gradio Space is reproducible end-to-end with `seed=42`.
+
+---
+
+*CHEX - Document Intelligence*

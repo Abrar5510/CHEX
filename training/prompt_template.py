@@ -1,5 +1,5 @@
 """
-Prompt template for CHEX.
+Prompt template for CHEX - Document Intelligence.
 
 Provides a system prompt with 3 hardcoded few-shot examples (one per label class)
 and utility functions for formatting training examples and inference prompts.

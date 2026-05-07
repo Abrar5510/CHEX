@@ -1,5 +1,5 @@
 """
-ContractAnalyzer — inference wrapper for the CHEX fine-tuned model.
+ContractAnalyzer — inference wrapper for the CHEX - Document Intelligence fine-tuned model.
 
 Uses HuggingFace pipeline for ROCm compatibility (not vLLM).
 Validates output JSON against ModelOutput schema; retries once with a stricter
@@ -204,7 +204,7 @@ class ContractAnalyzer:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run CHEX inference on a contract file.")
+    parser = argparse.ArgumentParser(description="Run CHEX Document Intelligence inference on a document file.")
     parser.add_argument("--model_path", required=True, help="Model path or HF Hub repo")
     parser.add_argument("--contract_file", type=Path, required=True, help="Contract .txt file")
     parser.add_argument("--question", required=True, help="Question about the contract")
