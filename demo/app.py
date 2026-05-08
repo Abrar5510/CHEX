@@ -1168,47 +1168,49 @@ label.block, .label-wrap {
   gap: 14px !important;
 }
 
+/* ── Topbar ─────────────────────────────────────────────────────────────── */
 .chex-topbar {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 0 28px;
-  height: 60px;
+  height: 52px;
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(11, 14, 20, 0.75);
+  background: rgba(11, 14, 20, 0.85);
   backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   border-bottom: 1px solid var(--hairline);
 }
 
 .chex-logo {
-  width: 24px; height: 24px; border-radius: 6px;
+  width: 22px; height: 22px; border-radius: 5px;
   background: #E2E8F0;
   color: #0B0E14; display: grid; place-items: center;
-  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px;
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 10px;
   letter-spacing: -0.05em;
   box-shadow: 0 2px 10px rgba(0,0,0,0.5);
   flex-shrink: 0;
 }
 
-.chex-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); font-family: 'Inter', sans-serif; }
-.chex-tag { font-size: 12px; color: var(--fg-muted); font-weight: 400; padding-left: 12px; border-left: 1px solid var(--hairline); font-family: 'Inter', sans-serif; }
+.chex-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); font-family: 'Inter', sans-serif; }
+.chex-tag { font-size: 12px; color: var(--fg-muted); font-weight: 400; padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.08); font-family: 'Inter', sans-serif; }
 
 .chex-pill {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 5px 12px 5px 10px; border: 1px solid var(--border); border-radius: 999px;
-  font-size: 12px; color: var(--fg-muted); background: var(--bg-elev);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 11px 4px 9px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 11.5px; color: var(--fg-muted); background: var(--bg-elev);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   font-family: 'JetBrains Mono', monospace; white-space: nowrap;
 }
 
 .chex-dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--green);
-  box-shadow: 0 0 0 3px rgba(15,157,88,0.22); display: inline-block; flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.22); display: inline-block; flex-shrink: 0;
 }
 
+/* ── Warning banner ─────────────────────────────────────────────────────── */
 .chex-banner {
   display: flex; align-items: center; gap: 12px; padding: 11px 20px;
   border-bottom: 1px solid var(--amber-border); background: var(--amber-bg);
@@ -1220,18 +1222,19 @@ label.block, .label-wrap {
 .chex-banner-body strong { color: var(--fg); font-weight: 600; }
 .chex-banner code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
 
+/* ── Tab nav ────────────────────────────────────────────────────────────── */
 .tab-nav {
-  background: var(--bg-elev) !important;
+  background: rgba(11,14,20,0.85) !important;
   backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   -webkit-backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   border-bottom: 1px solid var(--hairline) !important;
   border-top: none !important; padding: 0 20px !important; gap: 0 !important;
-  position: sticky !important; top: 60px !important; z-index: 99 !important; overflow: visible !important;
+  position: sticky !important; top: 52px !important; z-index: 99 !important; overflow: visible !important;
 }
 
 .tab-nav button {
   background: transparent !important; border: none !important; border-radius: 0 !important;
-  padding: 14px 16px !important; color: var(--fg-muted) !important;
+  padding: 13px 16px !important; color: var(--fg-muted) !important;
   font-size: 13px !important; font-weight: 500 !important; font-family: 'Inter', sans-serif !important;
   letter-spacing: -0.003em !important; position: relative !important; white-space: nowrap !important;
   transition: color 0.15s ease !important; cursor: pointer !important; box-shadow: none !important; outline: none !important;
@@ -1248,8 +1251,9 @@ label.block, .label-wrap {
   height: 1.5px; background: var(--fg); border-radius: 2px 2px 0 0;
 }
 
-.tabitem { border: none !important; background: transparent !important; padding: 24px 24px !important; }
+.tabitem { border: none !important; background: transparent !important; padding: 20px 20px !important; }
 
+/* ── Cards (gr-group) ───────────────────────────────────────────────────── */
 .gradio-container .gr-group {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(180%) !important;
@@ -1260,31 +1264,59 @@ label.block, .label-wrap {
   overflow: hidden !important; padding: 0 !important;
 }
 
-.gradio-container .gr-group > *:not(.chex-card-header):not(.chex-chip-row) {
+.gradio-container .gr-group > *:not(.chex-card-header):not(.chex-load-bar) {
   padding-left: 20px !important; padding-right: 20px !important;
 }
 .gradio-container .gr-group > *:last-child { padding-bottom: 18px !important; }
 
+/* ── Card header (new design) ───────────────────────────────────────────── */
 .chex-card-header {
-  padding: 16px 20px; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--hairline);
+  padding: 14px 20px; display: flex; align-items: center;
+  gap: 10px; border-bottom: 1px solid var(--hairline);
+}
+
+.chex-card-icon {
+  opacity: 0.45; flex-shrink: 0; display: flex; align-items: center;
 }
 
 .chex-card-title {
-  font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
-  display: inline-flex; align-items: center; gap: 10px; color: var(--fg);
-  white-space: nowrap; font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--fg); white-space: nowrap; font-family: 'Inter', sans-serif;
+  display: inline-flex; align-items: center; gap: 0;
 }
 
-.chex-card-kicker { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--fg-subtle); font-weight: 400; letter-spacing: 0.04em; }
-
-.chex-chip-row {
-  display: flex; align-items: center; gap: 8px; padding: 12px 20px;
-  border-top: 1px solid var(--hairline); background: var(--bg-sunken); flex-wrap: wrap;
+.chex-card-sep {
+  font-size: 13px; color: var(--fg-subtle); font-weight: 400;
+  padding: 0 6px; font-family: 'Inter', sans-serif;
 }
 
-.chex-chip-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); white-space: nowrap; margin-right: 4px; }
+.chex-card-sub {
+  font-size: 12px; color: var(--fg-subtle); font-weight: 400;
+  font-family: 'Inter', sans-serif; letter-spacing: 0;
+}
 
+/* ── Load bar (LOAD chip + sample buttons row) ─────────────────────────── */
+.chex-load-bar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline); background: var(--bg-sunken); flex-wrap: wrap;
+}
+
+.chex-load-chip {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--fg-subtle); background: var(--bg-elev-strong);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 7px; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Question label chip */
+.chex-question-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--fg-subtle); padding: 14px 20px 6px; display: block;
+}
+
+/* ── Suggested hint ─────────────────────────────────────────────────────── */
 .chex-suggested {
   display: flex; align-items: center; gap: 10px; padding: 10px 14px;
   background: rgba(13,18,32,0.04); border: 1px solid var(--border); border-radius: var(--radius);
@@ -1292,13 +1324,15 @@ label.block, .label-wrap {
 }
 .chex-suggested-icon { font-size: 13px; flex-shrink: 0; opacity: 0.7; }
 
+/* ── Labels ─────────────────────────────────────────────────────────────── */
 label > span:first-child, .label-wrap span,
 .gradio-container label span.text-gray-500, span.svelte-1b6s6s {
-  font-family: 'JetBrains Mono', monospace !important; font-size: 10.5px !important;
+  font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important;
   font-weight: 500 !important; text-transform: uppercase !important; letter-spacing: 0.08em !important;
   color: var(--fg-subtle) !important; margin-bottom: 6px !important; display: block !important;
 }
 
+/* ── Text inputs ────────────────────────────────────────────────────────── */
 textarea, input[type="text"], input[type="search"],
 .gradio-container .gr-input, .gradio-container .gr-textarea,
 .gradio-container [data-testid="textbox"] textarea,
@@ -1327,17 +1361,18 @@ textarea[readonly],
   color: var(--fg) !important; cursor: default !important;
 }
 
+/* ── Buttons ────────────────────────────────────────────────────────────── */
 .gradio-container button {
   font-family: 'Inter', sans-serif !important; font-size: 13px !important;
   font-weight: 500 !important; border-radius: var(--radius) !important;
-  padding: 10px 16px !important;
+  padding: 9px 16px !important;
   transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
   cursor: pointer !important; letter-spacing: -0.003em !important;
 }
 
 .gradio-container button.primary, button.primary {
   background: var(--fg) !important; color: var(--bg-base) !important; border: 1px solid var(--fg) !important;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.1) inset !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.08) inset !important;
 }
 .gradio-container button.primary:hover, button.primary:hover { opacity: 0.9 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
 
@@ -1347,12 +1382,14 @@ textarea[readonly],
 }
 .gradio-container button.secondary:hover, button.secondary:hover { background: var(--bg-elev) !important; color: var(--fg) !important; border-color: var(--border-strong) !important; }
 
-button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !important; padding: 7px 11px !important; }
+button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !important; padding: 6px 12px !important; }
 
+/* ── File upload ────────────────────────────────────────────────────────── */
 .gradio-container .upload-container, .gradio-container [data-testid="file"] {
   background: var(--bg-input) !important; border: 1px dashed var(--border-strong) !important; border-radius: var(--radius) !important;
 }
 
+/* ── Dataframe / table ──────────────────────────────────────────────────── */
 .gradio-container .wrap.svelte-a4gbbr, .gradio-container .table-wrap,
 .gradio-container [data-testid="dataframe"] {
   background: var(--bg-elev) !important;
@@ -1372,7 +1409,7 @@ button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !
 .gradio-container th {
   background: var(--bg-sunken) !important; border-bottom: 1px solid var(--hairline) !important;
   border-top: none !important; padding: 14px 18px !important;
-  font-family: 'JetBrains Mono', monospace !important; font-size: 10.5px !important;
+  font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important;
   text-transform: uppercase !important; letter-spacing: 0.08em !important;
   color: var(--fg-muted) !important; font-weight: 500 !important; text-align: left !important;
 }
@@ -1385,6 +1422,7 @@ button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !
 
 .gradio-container tr:first-child td { border-top: none !important; }
 
+/* ── Markdown prose ─────────────────────────────────────────────────────── */
 .gradio-container .prose, .gradio-container .md, .gradio-container [data-testid="markdown"] {
   color: var(--fg) !important; font-family: 'Inter', sans-serif !important;
   font-size: 13px !important; line-height: 1.65 !important;
@@ -1407,36 +1445,114 @@ button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !
   border-radius: 4px !important; color: var(--fg) !important;
 }
 
-.chex-bench-intro {
-  background: var(--bg-elev); backdrop-filter: blur(var(--blur)) saturate(180%);
+/* ── Benchmark intro card ───────────────────────────────────────────────── */
+.chex-bench-wrap {
+  background: var(--bg-elev);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md); padding: 24px 28px; margin-bottom: 20px;
+  box-shadow: var(--shadow-md); margin-bottom: 20px; overflow: hidden;
 }
 
-.chex-bench-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; letter-spacing: -0.02em; color: var(--fg); font-family: 'Inter', sans-serif; }
-.chex-bench-intro p { margin: 0; color: var(--fg-muted); font-size: 13px; line-height: 1.65; font-family: 'Inter', sans-serif; }
+.chex-bench-top {
+  padding: 24px 28px 20px; display: flex; align-items: flex-start; gap: 28px;
+}
 
-.chex-bench-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; }
-.chex-bench-stat { background: var(--bg-sunken); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 12px 14px; }
-.chex-bench-stat .v { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -0.025em; color: var(--fg); line-height: 1.2; margin-bottom: 4px; }
+.chex-bench-copy { flex: 1; min-width: 0; }
+.chex-bench-copy h2 { margin: 0 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--fg); font-family: 'Inter', sans-serif; }
+.chex-bench-copy p { margin: 0; color: var(--fg-muted); font-size: 13px; line-height: 1.65; font-family: 'Inter', sans-serif; }
+
+.chex-bench-stats {
+  display: flex; gap: 0; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.chex-bench-stat {
+  padding: 14px 20px; display: flex; flex-direction: column; gap: 3px;
+  border-right: 1px solid var(--border);
+}
+.chex-bench-stat:last-child { border-right: none; }
+.chex-bench-stat .v { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
 .chex-bench-stat .v.red { color: var(--red); }
 .chex-bench-stat .v.green { color: var(--green); }
+.chex-bench-stat .v.white { color: var(--fg); }
 .chex-bench-stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); font-family: 'JetBrains Mono', monospace; }
 
-.chex-footer {
-  border-top: 1px solid var(--hairline); padding: 14px 28px;
-  display: flex; align-items: center; gap: 18px; color: var(--fg-subtle);
-  font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
-  background: var(--bg-elev); backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur)); margin-top: 32px;
+/* ── Benchmark HTML table ───────────────────────────────────────────────── */
+.chex-bench-table-wrap {
+  background: var(--bg-elev);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md); overflow: hidden;
 }
-.chex-footer .sep { opacity: 0.4; }
 
+.chex-bench-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+}
+
+.chex-bench-table th {
+  background: var(--bg-sunken) !important; border-bottom: 1px solid var(--hairline) !important;
+  padding: 13px 18px !important; font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important; text-transform: uppercase !important; letter-spacing: 0.08em !important;
+  color: var(--fg-muted) !important; font-weight: 500 !important; text-align: left !important;
+  white-space: nowrap;
+}
+
+.chex-bench-table td {
+  padding: 16px 18px; border-top: 1px solid var(--hairline);
+  vertical-align: top; line-height: 1.55; color: var(--fg);
+}
+
+.chex-bench-table tr:first-child td { border-top: none; }
+
+.chex-bench-table .col-question { color: var(--fg); font-weight: 400; }
+.chex-bench-table .col-truth { color: var(--fg-muted); font-style: italic; }
+.chex-bench-table .col-base { color: #F87171; }
+.chex-bench-table .col-halluc { text-align: center; }
+
+/* Inline label badges for the benchmark table */
+.cbadge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 8px; font-size: 11px;
+  font-weight: 600; letter-spacing: 0.02em; font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+}
+.cbadge-green  { background: rgba(16,185,129,0.12); color: #10B981; border: 1px solid rgba(16,185,129,0.28); }
+.cbadge-red    { background: rgba(244,63,94,0.10);  color: #F43F5E; border: 1px solid rgba(244,63,94,0.28); }
+.cbadge-amber  { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.30); }
+.cbadge-icon   { font-size: 12px; }
+
+.chex-halluc-yes  { color: var(--red); font-size: 15px; }
+.chex-halluc-no   { color: var(--green); font-size: 15px; }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.chex-footer {
+  border-top: 1px solid var(--hairline); padding: 13px 28px;
+  display: flex; align-items: center; gap: 18px; color: var(--fg-subtle);
+  font-size: 11px; font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-elev); backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur)); margin-top: 24px;
+  justify-content: space-between;
+}
+.chex-footer-left { display: flex; align-items: center; gap: 18px; }
+.chex-footer .sep { opacity: 0.35; }
+.chex-footer-right { font-size: 11px; color: var(--fg-subtle); opacity: 0.6; }
+
+/* ── Misc helpers ───────────────────────────────────────────────────────── */
 .chex-label-wrap { padding: 4px 0 8px; }
 .chex-divider { height: 1px; background: var(--hairline); margin: 18px 0; }
-.chex-section-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); margin-bottom: 10px; display: block; }
+.chex-section-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); margin-bottom: 10px; display: block; }
 .chex-card-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.chex-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 48px 24px; color: var(--fg-subtle); text-align: center;
+}
+.chex-empty-icon { font-size: 20px; opacity: 0.4; }
+.chex-empty-title { font-size: 13.5px; font-weight: 500; color: var(--fg-muted); font-family: 'Inter', sans-serif; }
+.chex-empty-body { font-size: 12.5px; color: var(--fg-subtle); line-height: 1.6; font-family: 'Inter', sans-serif; max-width: 280px; }
 
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
@@ -1451,7 +1567,8 @@ button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !
   .chex-topbar { padding: 0 16px; }
   .chex-tag { display: none; }
   .tabitem { padding: 16px !important; }
-  .chex-bench-stats { grid-template-columns: 1fr; }
+  .chex-bench-top { flex-direction: column; gap: 16px; }
+  .chex-bench-stats { flex-direction: row; }
   .chex-footer { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
 }
 """
@@ -1466,77 +1583,170 @@ TOPBAR_HTML = """
   <span class="chex-name">CHEX</span>
   <span class="chex-tag">grounded answers from documents</span>
   <div style="flex:1"></div>
-  <div class="chex-pill"><span class="chex-dot"></span>MI300X · ready</div>
+  <div class="chex-pill"><span class="chex-dot"></span>MI300X &middot; ready</div>
 </div>
 """
 
 FOOTER_HTML = """
 <div class="chex-footer">
-  <span>chex/v0.4.1</span>
-  <span class="sep">·</span>
-  <span>endpoint: mi300x-east-2</span>
-  <span class="sep">·</span>
-  <span>tokens/s 142.7</span>
+  <div class="chex-footer-left">
+    <span>chex/v0.4.1</span>
+    <span class="sep">&middot;</span>
+    <span>endpoint: mi300x-east-2</span>
+    <span class="sep">&middot;</span>
+    <span>tokens/s 142.7</span>
+  </div>
+  <div class="chex-footer-right">&#8617; to analyse &nbsp;&nbsp; &#8984;K shortcuts</div>
 </div>
 """
 
 BENCH_INTRO_HTML = """
-<div class="chex-bench-intro">
-  <h2>Why grounding matters</h2>
-  <p>We ran the same questions through a base instruction-tuned model and through CHEX.
-  The base model invented or extrapolated answers in 4 of 5 cases — confident, plausible, wrong.
-  CHEX returned a verifiable label, a verbatim citation, and refused to answer when the source was silent.</p>
-  <div class="chex-bench-stats">
-    <div class="chex-bench-stat"><div class="v red">4/5</div><div class="k">Base hallucinations</div></div>
-    <div class="chex-bench-stat"><div class="v green">5/5</div><div class="k">CHEX correct</div></div>
-    <div class="chex-bench-stat"><div class="v">100%</div><div class="k">Cited verbatim</div></div>
+<div class="chex-bench-wrap">
+  <div class="chex-bench-top">
+    <div class="chex-bench-copy">
+      <h2>Why grounding matters</h2>
+      <p>We ran the same five questions through a base instruction-tuned model and through CHEX. The base model invented or extrapolated answers in 4 of 5 cases &mdash; confident, plausible, wrong. CHEX returned a verifiable label, a verbatim citation, and refused to answer when the source was silent.</p>
+    </div>
+    <div class="chex-bench-stats">
+      <div class="chex-bench-stat"><div class="v red">4/5</div><div class="k">Base hallucinations</div></div>
+      <div class="chex-bench-stat"><div class="v green">5/5</div><div class="k">CHEX correct</div></div>
+      <div class="chex-bench-stat"><div class="v white">100%</div><div class="k">Cited verbatim</div></div>
+    </div>
   </div>
+</div>
+"""
+
+BENCH_TABLE_HTML = """
+<div class="chex-bench-table-wrap">
+  <table class="chex-bench-table">
+    <thead>
+      <tr>
+        <th>Question</th>
+        <th>Ground truth</th>
+        <th>Base model</th>
+        <th>CHEX</th>
+        <th>Halluc.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-question">What is the annual license fee in the Helix MSA?</td>
+        <td class="col-truth">$144,000</td>
+        <td class="col-base">$120,000 per year (industry-standard rate).</td>
+        <td>
+          <span class="cbadge cbadge-green"><span class="cbadge-icon">&#10003;</span> GROUNDED</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--fg-muted)">$144,000 per year.</div>
+        </td>
+        <td class="col-halluc"><span class="chex-halluc-yes">!</span></td>
+      </tr>
+      <tr>
+        <td class="col-question">What is the SLA uptime in the Northwind MSA?</td>
+        <td class="col-truth">99.9% per calendar month</td>
+        <td class="col-base">99.95% with four nines on premium tier.</td>
+        <td>
+          <span class="cbadge cbadge-green"><span class="cbadge-icon">&#10003;</span> GROUNDED</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--fg-muted)">99.9% per calendar month, excluding maintenance.</div>
+        </td>
+        <td class="col-halluc"><span class="chex-halluc-yes">!</span></td>
+      </tr>
+      <tr>
+        <td class="col-question">Does the Aperture NDA include an indemnification clause?</td>
+        <td class="col-truth" style="font-style:italic">Not present in the document.</td>
+        <td class="col-base">Yes &mdash; Section 7 of the NDA contains standard mutual indemnification.</td>
+        <td>
+          <span class="cbadge cbadge-red"><span class="cbadge-icon">&#10007;</span> ABSENT</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--fg-muted)">No indemnification clause is present.</div>
+        </td>
+        <td class="col-halluc"><span class="chex-halluc-yes">!</span></td>
+      </tr>
+      <tr>
+        <td class="col-question">Within how many days must security incidents be reported?</td>
+        <td class="col-truth">72 hours</td>
+        <td class="col-base">72 hours.</td>
+        <td>
+          <span class="cbadge cbadge-green"><span class="cbadge-icon">&#10003;</span> GROUNDED</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--fg-muted)">Within 72 hours of becoming aware.</div>
+        </td>
+        <td class="col-halluc"><span class="chex-halluc-no">&#10003;</span></td>
+      </tr>
+      <tr>
+        <td class="col-question">Is the NDA perpetual?</td>
+        <td class="col-truth" style="font-style:italic">No &mdash; 2 year term.</td>
+        <td class="col-base">The NDA appears to be perpetual based on standard NDA practice.</td>
+        <td>
+          <span class="cbadge cbadge-amber"><span class="cbadge-icon">&#9888;</span> CONTRADICTS PRIOR</span>
+          <div style="margin-top:8px;font-size:12.5px;color:var(--fg-muted)">No &mdash; 2 year term, contradicts the premise.</div>
+        </td>
+        <td class="col-halluc"><span class="chex-halluc-yes">!</span></td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 """
 
 CONTRACT_SOURCE_HEADER_HTML = """
 <div class="chex-card-header">
-  <span class="chex-card-title">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    Source Document
-  </span>
-  <span class="chex-card-kicker">paste · load sample</span>
+  <div class="chex-card-icon">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  </div>
+  <span class="chex-card-title">Contract source</span>
+  <span class="chex-card-sep">/</span>
+  <span class="chex-card-sub">paste or load sample</span>
 </div>
 """
 
 CONTRACT_RESULTS_HEADER_HTML = """
 <div class="chex-card-header">
-  <span class="chex-card-title">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    Analysis
-  </span>
-  <span class="chex-card-kicker">grounded · cited · structured</span>
+  <div class="chex-card-icon">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+  </div>
+  <span class="chex-card-title">Classification</span>
+  <span class="chex-card-sep">/</span>
+  <span class="chex-card-sub">ask a question of the source</span>
 </div>
 """
 
-CHIP_ROW_HTML = """
-<div class="chex-chip-row">
-  <span class="chex-chip-label">Load sample</span>
+LOAD_BAR_HTML = """
+<div class="chex-load-bar">
+  <span class="chex-load-chip">LOAD</span>
 </div>
 """
 
 STATEMENT_SOURCE_HEADER_HTML = """
 <div class="chex-card-header">
-  <span class="chex-card-title">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-    Bank Statement
-  </span>
-  <span class="chex-card-kicker">paste · pdf · csv · txt · xlsx · ofx</span>
+  <div class="chex-card-icon">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+  </div>
+  <span class="chex-card-title">Statement source</span>
+  <span class="chex-card-sep">/</span>
+  <span class="chex-card-sub">paste &middot; upload pdf &middot; upload csv</span>
 </div>
 """
 
 STATEMENT_RESULTS_HEADER_HTML = """
 <div class="chex-card-header">
-  <span class="chex-card-title">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    Summary &amp; Q&amp;A
-  </span>
-  <span class="chex-card-kicker">summarise · ask · verify</span>
+  <div class="chex-card-icon">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+  </div>
+  <span class="chex-card-title">Statement analysis</span>
+  <span class="chex-card-sep">/</span>
+  <span class="chex-card-sub">summary + Q&amp;A</span>
+</div>
+"""
+
+CONTRACT_EMPTY_HTML = """
+<div class="chex-empty">
+  <div class="chex-empty-icon">&#9889;</div>
+  <div class="chex-empty-title">No analysis yet</div>
+  <div class="chex-empty-body">Load or paste a contract, type a question, then press Analyze. CHEX will return a label, an exact citation, and its reasoning.</div>
+</div>
+"""
+
+STATEMENT_EMPTY_HTML = """
+<div class="chex-empty">
+  <div class="chex-empty-icon">&#9141;</div>
+  <div class="chex-empty-title">Awaiting statement</div>
+  <div class="chex-empty-body">Paste, upload, or load the sample. CHEX will summarise totals, surface recurring payments, and flag anomalies you can drill into.</div>
 </div>
 """
 
@@ -1563,10 +1773,10 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                         contract_input = gr.Textbox(
                             label="Contract text",
                             lines=20,
-                            placeholder="Paste your contract text here, or load a sample below…",
+                            placeholder="Paste contract text here, or load a sample above…",
                             show_label=False,
                         )
-                        gr.HTML(CHIP_ROW_HTML)
+                        gr.HTML(LOAD_BAR_HTML)
                         with gr.Row():
                             btn_software = gr.Button("Software License", variant="secondary", size="sm")
                             btn_nda = gr.Button("NDA", variant="secondary", size="sm")
@@ -1576,19 +1786,20 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                 with gr.Column(scale=11):
                     with gr.Group():
                         gr.HTML(CONTRACT_RESULTS_HEADER_HTML)
+                        gr.HTML('<span class="chex-question-label">Question</span>')
                         with gr.Row():
                             question_input = gr.Textbox(
                                 label="Question",
-                                placeholder="e.g., What is the limitation of liability?",
+                                placeholder="e.g., What is the annual license fee?",
                                 lines=1,
                                 show_label=False,
                                 scale=8,
                             )
                             analyze_btn = gr.Button("Analyze ↵", variant="primary", scale=2)
-                        label_display = gr.HTML(value=format_label_html("N/A"))
-                        answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
-                        citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
-                        reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
+                        label_display = gr.HTML(value=CONTRACT_EMPTY_HTML)
+                        answer_output = gr.Textbox(label="Answer", interactive=False, lines=3, visible=False)
+                        citation_output = gr.Textbox(label="Citation", interactive=False, lines=2, visible=False)
+                        reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3, visible=False)
 
         # ── Tab 02: Bank Statements ────────────────────────────────────── #
         with gr.Tab("02  Bank statements"):
@@ -1603,10 +1814,7 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                                     label="Bank statement text (supports multiple)",
                                     lines=20,
                                     placeholder=(
-                                        "Paste one or more bank statements here.\n\n"
-                                        "If you paste multiple statements, separate them with a line containing only "
-                                        "`---` (3+ dashes)."
-                                        "\n\nOr load the sample below…"
+                                        "Paste your statement here, e.g. lines like: 2025-03-15  Direct deposit +5,420.00…"
                                     ),
                                     show_label=False,
                                 )
@@ -1652,7 +1860,8 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                     with gr.Group():
                         gr.HTML(STATEMENT_RESULTS_HEADER_HTML)
                         analyse_stmt_btn = gr.Button("Analyse statement", variant="primary")
-                        summary_output = gr.Markdown(value="*Run 'Analyse statement' to generate a financial summary.*")
+                        summary_output = gr.HTML(value=STATEMENT_EMPTY_HTML)
+                        summary_md_output = gr.Markdown(value="", visible=False)
                         with gr.Row():
                             export_csv_btn = gr.Button("Export CSV", variant="secondary", size="sm")
                             export_pdf_btn = gr.Button("Export PDF", variant="secondary", size="sm")
@@ -1684,13 +1893,7 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
         # ── Tab 03: Benchmark ──────────────────────────────────────────── #
         with gr.Tab("03  Benchmark"):
             gr.HTML(BENCH_INTRO_HTML)
-            gr.Dataframe(
-                value=BENCHMARK_DF,
-                headers=list(BENCHMARK_DF.columns),
-                datatype=["str"] * len(BENCHMARK_DF.columns),
-                wrap=True,
-                interactive=False,
-            )
+            gr.HTML(BENCH_TABLE_HTML)
 
     gr.HTML(FOOTER_HTML)
 
@@ -1712,14 +1915,23 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
     btn_nda.click(fn=load_nda, inputs=[], outputs=[contract_input, question_input, suggested_q])
     btn_service.click(fn=load_service, inputs=[], outputs=[contract_input, question_input, suggested_q])
 
+    def analyze_contract_ui(contract_text: str, question: str):
+        label_html, answer, citation, reasoning = analyze_contract(contract_text, question)
+        return (
+            label_html,
+            gr.update(value=answer, visible=True),
+            gr.update(value=citation, visible=True),
+            gr.update(value=reasoning, visible=True),
+        )
+
     analyze_btn.click(
-        fn=analyze_contract,
+        fn=analyze_contract_ui,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
         api_name="contract_analyze",
     )
     question_input.submit(
-        fn=analyze_contract,
+        fn=analyze_contract_ui,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
         api_name="contract_analyze",
@@ -1727,8 +1939,19 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
 
     btn_load_statement.click(fn=lambda: SAMPLE_STATEMENT, inputs=[], outputs=[bank_paste_input])
 
+    def analyse_bank_ui(paste_text, pdf_file, pdf_password, csv_file, txt_file, xlsx_file, ofx_file):
+        summary_md, combined_text, summary_json = analyse_bank_statement(
+            paste_text, pdf_file, pdf_password, csv_file, txt_file, xlsx_file, ofx_file
+        )
+        return (
+            gr.update(value="", visible=False),
+            gr.update(value=summary_md, visible=True),
+            combined_text,
+            summary_json,
+        )
+
     analyse_stmt_btn.click(
-        fn=analyse_bank_statement,
+        fn=analyse_bank_ui,
         inputs=[
             bank_paste_input,
             bank_pdf_input,
@@ -1738,7 +1961,7 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
             bank_xlsx_input,
             bank_ofx_input,
         ],
-        outputs=[summary_output, bank_statement_state, bank_summary_state],
+        outputs=[summary_output, summary_md_output, bank_statement_state, bank_summary_state],
     )
 
     export_csv_btn.click(
