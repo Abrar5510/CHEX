@@ -9,10 +9,14 @@ Tab 3: Analyse Bank Statement — paste / upload a bank statement, get a summary
 
 from __future__ import annotations
 
+import csv
+import datetime as _dt
 import importlib.util
+import io
 import json
 import os
 import re
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -124,7 +128,7 @@ Question: Does this agreement restrict the Recipient from competing with the Dis
 
 BANK_SYSTEM_PROMPT = """\
 You are a financial analysis assistant specialising in bank statement review. \
-Given a bank statement (plain text, CSV-derived, or PDF-extracted) and either a \
+Given a bank statement (plain text, CSV/Excel-derived, OFX/QFX-derived, or PDF-extracted) and either a \
 summary request or a specific question, produce a single JSON object.
 
 For SUMMARY mode (question is "SUMMARISE"):
@@ -356,83 +360,581 @@ def analyze_contract(contract_text: str, question: str) -> tuple[str, str, str, 
     )
 
 
-def _get_statement_text(paste_text: str, pdf_file, csv_file) -> tuple[str, str]:
-    if pdf_file is not None:
+def _get_statement_text(
+    paste_text: str,
+    pdf_file,
+    pdf_password: str | None,
+    csv_file,
+    txt_file,
+    xlsx_file,
+    ofx_file,
+) -> tuple[str, str]:
+    # Backwards-compatible shim: treat "single statement" inputs as one item.
+    texts, errors = _get_statement_texts(
+        paste_text,
+        pdf_file,
+        pdf_password,
+        csv_file,
+        txt_file,
+        xlsx_file,
+        ofx_file,
+    )
+    if not texts:
+        return (
+            "",
+            errors[0]
+            if errors
+            else "Please paste a bank statement or upload a PDF / CSV / TXT / XLSX / OFX/QFX file."
+        )
+    return texts[0], ""
+
+
+def _ensure_file_list(files) -> list:
+    if files is None:
+        return []
+    if isinstance(files, (list, tuple)):
+        return [f for f in files if f is not None]
+    return [files]
+
+
+def _split_statements(paste_text: str) -> list[str]:
+    """
+    Split pasted content into multiple statements.
+
+    Delimiter: a line containing only `---` (3+ dashes), optionally surrounded by whitespace.
+    """
+    text = (paste_text or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"(?m)^[ \t]*-{3,}[ \t]*$", text)
+    cleaned = [p.strip() for p in parts if p.strip()]
+    return cleaned if cleaned else [text]
+
+
+def _get_statement_texts(
+    paste_text: str,
+    pdf_files,
+    pdf_password: str | None,
+    csv_files,
+    txt_files,
+    xlsx_files,
+    ofx_files,
+) -> tuple[list[str], list[str]]:
+    """
+    Extract statement text blocks from:
+      - pasted text (can contain multiple statements separated by `---`)
+      - uploaded PDFs (supports multiple)
+      - uploaded CSVs (supports multiple)
+      - uploaded TXT files (supports multiple)
+      - uploaded Excel (.xlsx) (supports multiple)
+      - uploaded OFX/QFX files (supports multiple)
+    """
+    statement_texts: list[str] = []
+    errors: list[str] = []
+
+    pdf_list = _ensure_file_list(pdf_files)
+    csv_list = _ensure_file_list(csv_files)
+    txt_list = _ensure_file_list(txt_files)
+    xlsx_list = _ensure_file_list(xlsx_files)
+    ofx_list = _ensure_file_list(ofx_files)
+
+    # PDFs
+    if pdf_list:
         try:
             if importlib.util.find_spec("pdfplumber") is None:
-                return "", "pdfplumber not installed."
-            import pdfplumber
-            text_parts = []
-            with pdfplumber.open(str(pdf_file)) as pdf:
-                for page in pdf.pages:
-                    t = page.extract_text()
-                    if t:
-                        text_parts.append(t)
-            text = "\n".join(text_parts)
-            if not text.strip():
-                return "", "PDF was uploaded but no text could be extracted."
-            return text, ""
+                errors.append("pdfplumber not installed.")
+            else:
+                import pdfplumber
+                password = (pdf_password or "").strip()
+                for idx, pdf_file in enumerate(pdf_list):
+                    try:
+                        text_parts: list[str] = []
+                        try:
+                            with pdfplumber.open(
+                                str(pdf_file),
+                                password=password if password else "",
+                            ) as pdf:
+                                for page in pdf.pages:
+                                    t = page.extract_text()
+                                    if t:
+                                        text_parts.append(t)
+                        except TypeError:
+                            # Older pdfplumber versions may not accept `password=...`
+                            with pdfplumber.open(str(pdf_file)) as pdf:
+                                for page in pdf.pages:
+                                    t = page.extract_text()
+                                    if t:
+                                        text_parts.append(t)
+                        text = "\n".join(text_parts).strip()
+                        if not text:
+                            errors.append(f"PDF #{idx+1} uploaded but no text could be extracted.")
+                        else:
+                            statement_texts.append(text)
+                    except Exception as e:
+                        msg = str(e).lower()
+                        if "password" in msg or "encrypted" in msg or "decrypt" in msg:
+                            errors.append(
+                                f"PDF #{idx+1} is password-protected. Please enter the correct password."
+                            )
+                        else:
+                            errors.append(f"PDF #{idx+1} extraction error: {e}")
         except Exception as e:
-            return "", f"PDF extraction error: {e}"
+            errors.append(f"PDF extraction error: {e}")
 
-    if csv_file is not None:
+    # CSVs
+    if csv_list:
         try:
             import pandas as pd
-            df = pd.read_csv(str(csv_file))
-            df.columns = [c.strip().lower() for c in df.columns]
-            lines = []
-            for _, row in df.iterrows():
-                parts = [str(v).strip() for v in row.values if str(v).strip() not in ("", "nan")]
-                lines.append(", ".join(parts))
-            return ", ".join(df.columns.tolist()) + "\n" + "\n".join(lines), ""
-        except Exception as e:
-            return "", f"CSV parsing error: {e}"
+        except Exception:
+            if importlib.util.find_spec("pandas") is None:
+                errors.append("pandas not installed.")
+            else:
+                errors.append("CSV parsing error: pandas import failed.")
+        else:
+            for idx, csv_file in enumerate(csv_list):
+                try:
+                    df = pd.read_csv(str(csv_file))
+                    df.columns = [c.strip().lower() for c in df.columns]
+                    lines: list[str] = []
+                    for _, row in df.iterrows():
+                        parts = [
+                            str(v).strip()
+                            for v in row.values
+                            if str(v).strip() not in ("", "nan")
+                        ]
+                        lines.append(", ".join(parts))
+                    statement_texts.append(
+                        ", ".join(df.columns.tolist()) + "\n" + "\n".join(lines)
+                    )
+                except Exception as e:
+                    errors.append(f"CSV #{idx+1} parsing error: {e}")
 
-    if paste_text and paste_text.strip():
-        return paste_text.strip(), ""
+    # TXT
+    if txt_list:
+        for idx, txt_file in enumerate(txt_list):
+            try:
+                # Read best-effort encoding; then reuse the same delimiter splitting
+                # strategy as pasted input.
+                p = Path(str(txt_file))
+                content = p.read_text(encoding="utf-8", errors="replace")
+                parts = _split_statements(content)
+                if not parts:
+                    errors.append(f"TXT #{idx+1} uploaded but no text could be read.")
+                else:
+                    statement_texts.extend(parts)
+            except Exception as e:
+                errors.append(f"TXT #{idx+1} parsing error: {e}")
 
-    return "", "Please paste a bank statement or upload a PDF / CSV file."
+    # XLSX (Excel)
+    if xlsx_list:
+        try:
+            import pandas as pd
+        except Exception:
+            if importlib.util.find_spec("pandas") is None:
+                errors.append("pandas not installed.")
+            else:
+                errors.append("Excel parsing error: pandas import failed.")
+        else:
+            for idx, xlsx_file in enumerate(xlsx_list):
+                try:
+                    df = pd.read_excel(str(xlsx_file), sheet_name=0)
+                    if df is None or df.empty:
+                        errors.append(f"XLSX #{idx+1} uploaded but no rows were found.")
+                        continue
+                    df.columns = [str(c).strip().lower() for c in df.columns]
+                    lines: list[str] = []
+                    for _, row in df.iterrows():
+                        parts = [
+                            str(v).strip()
+                            for v in row.values
+                            if str(v).strip() not in ("", "nan", "NaN")
+                        ]
+                        lines.append(", ".join(parts))
+                    statement_texts.append(
+                        ", ".join(df.columns.tolist()) + "\n" + "\n".join(lines)
+                    )
+                except Exception as e:
+                    errors.append(f"XLSX #{idx+1} parsing error: {e}")
+
+    # OFX/QFX (lightweight tag extraction)
+    if ofx_list:
+        def _format_ofx_date(d: str) -> str:
+            d = (d or "").strip()
+            if len(d) == 8 and d.isdigit():
+                return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+            return d
+
+        for idx, ofx_file in enumerate(ofx_list):
+            try:
+                p = Path(str(ofx_file))
+                raw = p.read_bytes()
+                try:
+                    content = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    content = raw.decode("utf-8", errors="replace")
+
+                blocks = re.findall(
+                    r"<STMTTRN>(.*?)</STMTTRN>",
+                    content,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+
+                def _get_tag(block: str, tag: str) -> str:
+                    m = re.search(rf"<{tag}>([^<]*)", block, flags=re.IGNORECASE)
+                    return (m.group(1) if m else "").strip()
+
+                lines: list[str] = []
+                for b in blocks:
+                    dt = _get_tag(b, "DTPOSTED") or _get_tag(b, "DTTRAN")
+                    name = _get_tag(b, "NAME") or _get_tag(b, "PAYEE")
+                    memo = _get_tag(b, "MEMO") or _get_tag(b, "TRNTYPE")
+                    amt = _get_tag(b, "TRNAMT") or _get_tag(b, "AMOUNT")
+
+                    if not any([dt, name, memo, amt]):
+                        continue
+
+                    dt = _format_ofx_date(dt)
+                    desc_parts = [p for p in [name, memo] if p]
+                    desc = " - ".join(desc_parts) if desc_parts else "Transaction"
+                    lines.append(f"{dt}, {desc}, {amt}".strip(", "))
+
+                if lines:
+                    statement_texts.append("Date, Description, Amount\n" + "\n".join(lines))
+                else:
+                    # Fall back to returning the raw content (truncated).
+                    statement_texts.append(content.strip()[:20000])
+            except Exception as e:
+                errors.append(f"OFX/QFX #{idx+1} parsing error: {e}")
+
+    # Paste text (may contain multiple statements)
+    pasted_parts = _split_statements(paste_text)
+    if pasted_parts:
+        statement_texts.extend(pasted_parts)
+
+    if not statement_texts:
+        errors.append(
+            "Please paste a bank statement or upload a PDF / CSV / TXT / XLSX / OFX/QFX file(s)."
+        )
+
+    return statement_texts, errors
 
 
-def analyse_bank_statement(paste_text: str, pdf_file, csv_file) -> tuple[str, str]:
-    statement_text, error = _get_statement_text(paste_text, pdf_file, csv_file)
-    if error:
-        return f"**Error:** {error}", ""
+def analyse_bank_statement(
+    paste_text: str,
+    pdf_file,
+    pdf_password: str | None,
+    csv_file,
+    txt_file,
+    xlsx_file,
+    ofx_file,
+) -> tuple[str, str, str]:
+    statement_texts, errors = _get_statement_texts(
+        paste_text,
+        pdf_file,
+        pdf_password,
+        csv_file,
+        txt_file,
+        xlsx_file,
+        ofx_file,
+    )
+    if not statement_texts:
+        return f"**Error:** {errors[0] if errors else 'No bank statement provided.'}", "", ""
+
+    MAX_STATEMENTS = 6
+    if len(statement_texts) > MAX_STATEMENTS:
+        errors.append(f"Too many statements provided; only the first {MAX_STATEMENTS} were used.")
+        statement_texts = statement_texts[:MAX_STATEMENTS]
+
+    combined_text = "\n\n".join(
+        f"===== Statement {i+1}/{len(statement_texts)} =====\n\n{st.strip()}"
+        for i, st in enumerate(statement_texts)
+        if st.strip()
+    ).strip()
+
     if not MLX_SERVER_URL:
         return (
             f"**Inference client not initialised.** Error: {model_load_error}",
-            statement_text,
+            combined_text,
+            "",
         )
 
-    statement_text = _truncate(statement_text)
-    messages = _build_bank_messages(statement_text, "SUMMARISE")
+    summaries: list[BankStatementSummary] = []
+    for idx, statement_text in enumerate(statement_texts):
+        statement_text = _truncate(statement_text)
+        messages = _build_bank_messages(statement_text, "SUMMARISE")
 
-    for attempt in range(2):
-        msgs = _apply_messages(messages, strict=(attempt == 1))
-        try:
-            raw = _run_inference(msgs)
-            summary = _parse_summary(raw)
-            lines = ["## Statement Summary", ""]
-            lines.append(f"**Total Credits:** {summary.total_credits or 'N/A'}")
-            lines.append(f"**Total Debits:** {summary.total_debits or 'N/A'}")
-            lines.append(f"**Largest Transaction:** {summary.largest_transaction or 'N/A'}")
-            if summary.recurring_payments:
-                lines.append("\n**Recurring Payments:**")
-                for p in summary.recurring_payments:
-                    lines.append(f"- {p}")
-            if summary.flags:
-                lines.append("\n**Flags / Unusual Activity:**")
-                for f in summary.flags:
-                    lines.append(f"- {f}")
-            lines.append(f"\n*{summary.raw_reasoning}*")
-            return "\n".join(lines), statement_text
-        except Exception as e:
-            if attempt == 0:
-                print(f"  Summary parse attempt 1 failed ({e}). Retrying...")
-            else:
-                print(f"  Summary parse attempt 2 failed ({e}). Returning error.")
+        summary: BankStatementSummary | None = None
+        for attempt in range(2):
+            msgs = _apply_messages(messages, strict=(attempt == 1))
+            try:
+                raw = _run_inference(msgs)
+                summary = _parse_summary(raw)
+                break
+            except Exception as e:
+                if attempt == 0:
+                    print(f"  Summary parse attempt 1 failed (statement {idx+1}, {e}). Retrying...")
+                else:
+                    print(f"  Summary parse attempt 2 failed (statement {idx+1}, {e}). Returning error.")
 
-    return "**Summarisation error:** could not parse model output.", statement_text
+        if summary is None:
+            summary = BankStatementSummary(
+                raw_reasoning=f"Could not parse model output for statement {idx+1}."
+            )
+        summaries.append(summary)
+
+    # Render markdown
+    lines: list[str] = []
+    lines.append("## Statements Summary")
+    lines.append("")
+    if errors:
+        lines.append("**Notes:**")
+        for e in errors:
+            lines.append(f"- {e}")
+        lines.append("")
+
+    for idx, summary in enumerate(summaries):
+        lines.append(f"### Statement {idx+1}")
+        lines.append(f"**Total Credits:** {summary.total_credits or 'N/A'}")
+        lines.append(f"**Total Debits:** {summary.total_debits or 'N/A'}")
+        lines.append(
+            f"**Largest Transaction:** {summary.largest_transaction or 'N/A'}"
+        )
+        if summary.recurring_payments:
+            lines.append("\n**Recurring Payments:**")
+            for p in summary.recurring_payments:
+                lines.append(f"- {p}")
+        if summary.flags:
+            lines.append("\n**Flags / Unusual Activity:**")
+            for f in summary.flags:
+                lines.append(f"- {f}")
+        lines.append(f"\n*{summary.raw_reasoning}*")
+        lines.append("")
+
+    # Overall union (useful across multiple statements)
+    overall_recurring: list[str] = []
+    overall_flags: list[str] = []
+    for s in summaries:
+        for r in (s.recurring_payments or []):
+            if r not in overall_recurring:
+                overall_recurring.append(r)
+        for f in (s.flags or []):
+            if f not in overall_flags:
+                overall_flags.append(f)
+
+    lines.append("## Overall (union across statements)")
+    if overall_recurring:
+        lines.append("\n**Recurring Payments (union):**")
+        for p in overall_recurring:
+            lines.append(f"- {p}")
+    else:
+        lines.append("\n**Recurring Payments (union):** N/A")
+
+    if overall_flags:
+        lines.append("\n**Flags / Unusual Activity (union):**")
+        for f in overall_flags:
+            lines.append(f"- {f}")
+    else:
+        lines.append("\n**Flags / Unusual Activity (union):** N/A")
+
+    summary_json = json.dumps([s.model_dump() for s in summaries], ensure_ascii=False)
+    return "\n".join(lines).strip(), combined_text, summary_json
+
+
+def _safe_json_loads(s: str) -> object:
+    try:
+        obj = json.loads(s or "")
+        if isinstance(obj, (dict, list)):
+            return obj
+        return {}
+    except Exception:
+        return {}
+
+
+def _escape_pdf_text(s: str) -> str:
+    # PDF literal strings escape backslash and parentheses.
+    return (s or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _simple_pdf_bytes(title: str, lines: list[str]) -> bytes:
+    """
+    Tiny, dependency-free, single-page PDF generator for short text reports.
+    """
+    font = "Helvetica"
+    font_size = 11
+    left = 54
+    top = 790
+    leading = 14
+
+    safe_title = _escape_pdf_text(title)
+    safe_lines = [_escape_pdf_text(ln) for ln in lines]
+
+    content_lines: list[str] = []
+    content_lines.append("BT")
+    content_lines.append(f"/F1 {font_size} Tf")
+    content_lines.append(f"{left} {top} Td")
+    content_lines.append(f"({_escape_pdf_text(safe_title)}) Tj")
+    content_lines.append(f"0 -{leading*2} Td")
+    for ln in safe_lines:
+        content_lines.append(f"({ln}) Tj")
+        content_lines.append(f"0 -{leading} Td")
+    content_lines.append("ET")
+    stream = "\n".join(content_lines).encode("latin-1", errors="replace")
+
+    objects: list[bytes] = []
+    objects.append(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+    objects.append(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+    objects.append(
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n"
+    )
+    objects.append(f"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /{font} >>\nendobj\n".encode())
+    objects.append(
+        b"5 0 obj\n<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream\nendobj\n"
+    )
+
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    xref: list[int] = [0]
+    for obj in objects:
+        xref.append(out.tell())
+        out.write(obj)
+    xref_start = out.tell()
+    out.write(f"xref\n0 {len(xref)}\n".encode())
+    out.write(b"0000000000 65535 f \n")
+    for off in xref[1:]:
+        out.write(f"{off:010d} 00000 n \n".encode())
+    out.write(
+        b"trailer\n<< /Size "
+        + str(len(xref)).encode()
+        + b" /Root 1 0 R >>\nstartxref\n"
+        + str(xref_start).encode()
+        + b"\n%%EOF\n"
+    )
+    return out.getvalue()
+
+
+def export_bank_summary_csv(summary_json: str) -> tuple[str | None, str]:
+    data = _safe_json_loads(summary_json)
+    if not data:
+        return None, "**Export error:** Run 'Analyse statement' first."
+
+    statements = data if isinstance(data, list) else [data]
+
+    filename = f"bank-statement-summaries_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", prefix="chex_", mode="w", newline="", encoding="utf-8")
+    try:
+        writer = csv.writer(tmp)
+        writer.writerow([
+            "statement_index",
+            "total_credits",
+            "total_debits",
+            "largest_transaction",
+            "recurring_payments",
+            "flags",
+            "raw_reasoning",
+        ])
+
+        overall_recurring: list[str] = []
+        overall_flags: list[str] = []
+        for s in statements:
+            if not isinstance(s, dict):
+                continue
+            for r in (s.get("recurring_payments") or []):
+                if r not in overall_recurring:
+                    overall_recurring.append(r)
+            for f in (s.get("flags") or []):
+                if f not in overall_flags:
+                    overall_flags.append(f)
+
+        for i, s in enumerate(statements, start=1):
+            if not isinstance(s, dict):
+                continue
+            writer.writerow([
+                i,
+                s.get("total_credits") or "",
+                s.get("total_debits") or "",
+                s.get("largest_transaction") or "",
+                " | ".join(s.get("recurring_payments") or []),
+                " | ".join(s.get("flags") or []),
+                s.get("raw_reasoning") or "",
+            ])
+
+        # Overall union row
+        writer.writerow([
+            "overall",
+            "",
+            "",
+            "",
+            " | ".join(overall_recurring),
+            " | ".join(overall_flags),
+            "",
+        ])
+    finally:
+        tmp.close()
+
+    # Gradio uses the path; name displayed is fine.
+    return tmp.name, f"**CSV ready:** `{filename}`"
+
+
+def export_bank_summary_pdf(summary_json: str) -> tuple[str | None, str]:
+    data = _safe_json_loads(summary_json)
+    if not data:
+        return None, "**Export error:** Run 'Analyse statement' first."
+
+    statements = data if isinstance(data, list) else [data]
+
+    title = "CHEX — Bank Statement Summary (Multiple)"
+    lines: list[str] = [
+        f"Generated: {_dt.datetime.now().isoformat(timespec='seconds')}",
+        "",
+        f"Statements analysed: {len(statements)}",
+        "",
+    ]
+
+    overall_recurring: list[str] = []
+    overall_flags: list[str] = []
+    for s in statements:
+        if not isinstance(s, dict):
+            continue
+        for r in (s.get("recurring_payments") or []):
+            if r not in overall_recurring:
+                overall_recurring.append(r)
+        for f in (s.get("flags") or []):
+            if f not in overall_flags:
+                overall_flags.append(f)
+
+    lines += [
+        "Overall Recurring Payments:",
+        *([f"- {x}" for x in overall_recurring] if overall_recurring else ["- (none)"]),
+        "",
+        "Overall Flags / Unusual Activity:",
+        *([f"- {x}" for x in overall_flags] if overall_flags else ["- (none)"]),
+        "",
+    ]
+
+    for i, s in enumerate(statements, start=1):
+        if not isinstance(s, dict):
+            continue
+        lines += [
+            f"Statement {i}:",
+            f"- Total Credits: {s.get('total_credits') or 'N/A'}",
+            f"- Total Debits: {s.get('total_debits') or 'N/A'}",
+            f"- Largest Transaction: {s.get('largest_transaction') or 'N/A'}",
+        ]
+        rr = (s.get("raw_reasoning") or "").strip()
+        if rr:
+            lines += ["- Model reasoning: " + rr]
+        lines.append("")
+
+    pdf_bytes = _simple_pdf_bytes(title, lines)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", prefix="chex_", mode="wb")
+    try:
+        tmp.write(pdf_bytes)
+    finally:
+        tmp.close()
+
+    filename = f"bank-statement-summaries_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return tmp.name, f"**PDF ready:** `{filename}`"
 
 
 def bank_qa(statement_text: str, question: str) -> tuple[str, str, str, str]:
@@ -545,36 +1047,34 @@ CHEX_CSS = """
 *, *::before, *::after { box-sizing: border-box; }
 
 :root {
-  --bg-base: #f3f4f7;
-  --bg-grad: radial-gradient(ellipse 1200px 700px at 18% -10%, rgba(120,150,200,0.18), transparent 60%),
-             radial-gradient(ellipse 900px 600px at 95% 110%, rgba(180,160,220,0.14), transparent 55%),
-             linear-gradient(180deg, #f5f6f9 0%, #eef0f4 100%);
-  --bg-elev: rgba(255,255,255,0.62);
-  --bg-elev-strong: rgba(255,255,255,0.78);
-  --bg-sunken: rgba(245,246,249,0.55);
-  --bg-input: rgba(255,255,255,0.55);
-  --border: rgba(15,18,30,0.08);
-  --border-strong: rgba(15,18,30,0.14);
-  --hairline: rgba(15,18,30,0.06);
-  --fg: #0d1220;
-  --fg-muted: #5b6275;
-  --fg-subtle: #8a91a3;
-  --green: #0f9d58;
-  --green-bg: rgba(34,197,94,0.10);
-  --green-border: rgba(34,197,94,0.28);
-  --red: #d23131;
-  --red-bg: rgba(239,68,68,0.09);
-  --red-border: rgba(239,68,68,0.28);
-  --amber: #b87800;
+  --bg-base: #0B0E14;
+  --bg-grad: linear-gradient(180deg, #0B0E14 0%, #06080C 100%);
+  --bg-elev: #131720;
+  --bg-elev-strong: #191E2B;
+  --bg-sunken: #0E121A;
+  --bg-input: rgba(0,0,0,0.2);
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.12);
+  --hairline: rgba(255,255,255,0.03);
+  --fg: #E2E8F0;
+  --fg-muted: #94A3B8;
+  --fg-subtle: #475569;
+  --green: #10B981;
+  --green-bg: rgba(16,185,129,0.10);
+  --green-border: rgba(16,185,129,0.25);
+  --red: #F43F5E;
+  --red-bg: rgba(244,63,94,0.10);
+  --red-border: rgba(244,63,94,0.25);
+  --amber: #F59E0B;
   --amber-bg: rgba(245,158,11,0.10);
-  --amber-border: rgba(245,158,11,0.30);
-  --blur: 22px;
+  --amber-border: rgba(245,158,11,0.25);
+  --blur: 24px;
   --blur-strong: 32px;
-  --shadow-md: 0 1px 0 rgba(255,255,255,0.6) inset,
-               0 8px 24px rgba(15,18,30,0.06),
-               0 1px 2px rgba(15,18,30,0.04);
+  --shadow-md: 0 1px 0 rgba(255,255,255,0.03) inset,
+               0 8px 24px rgba(0,0,0,0.4),
+               0 1px 2px rgba(0,0,0,0.2);
   --radius: 10px;
-  --radius-lg: 16px;
+  --radius-lg: 14px;
 }
 
 body {
@@ -677,19 +1177,19 @@ label.block, .label-wrap {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg-elev);
+  background: rgba(11, 14, 20, 0.75);
   backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--blur-strong)) saturate(160%);
   border-bottom: 1px solid var(--hairline);
 }
 
 .chex-logo {
-  width: 26px; height: 26px; border-radius: 8px;
-  background: linear-gradient(135deg, #0d1220, rgba(13,18,32,0.7));
-  color: #f3f4f7; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 6px;
+  background: #E2E8F0;
+  color: #0B0E14; display: grid; place-items: center;
   font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px;
   letter-spacing: -0.05em;
-  box-shadow: 0 4px 14px rgba(15,18,30,0.18), 0 1px 0 rgba(255,255,255,0.25) inset;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
   flex-shrink: 0;
 }
 
@@ -815,8 +1315,8 @@ textarea, input[type="text"], input[type="search"],
 textarea:focus, input[type="text"]:focus,
 .gradio-container [data-testid="textbox"] textarea:focus,
 .gradio-container [data-testid="textbox"] input:focus {
-  border-color: var(--border-strong) !important; background: var(--bg-elev-strong) !important;
-  box-shadow: 0 0 0 4px rgba(13,18,32,0.08) !important; outline: none !important;
+  border-color: var(--border-strong) !important; background: var(--bg-elev) !important;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.05) !important; outline: none !important;
 }
 
 textarea::placeholder, input::placeholder { color: var(--fg-subtle) !important; }
@@ -837,16 +1337,15 @@ textarea[readonly],
 
 .gradio-container button.primary, button.primary {
   background: var(--fg) !important; color: var(--bg-base) !important; border: 1px solid var(--fg) !important;
-  box-shadow: 0 6px 18px rgba(13,18,32,0.28), 0 1px 0 rgba(255,255,255,0.1) inset !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.1) inset !important;
 }
-.gradio-container button.primary:hover, button.primary:hover { opacity: 0.88 !important; box-shadow: 0 4px 12px rgba(13,18,32,0.22) !important; }
+.gradio-container button.primary:hover, button.primary:hover { opacity: 0.9 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
 
 .gradio-container button.secondary, button.secondary {
-  background: var(--bg-elev) !important; backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important; color: var(--fg) !important;
-  border: 1px solid var(--border) !important; box-shadow: var(--shadow-md) !important;
+  background: transparent !important; color: var(--fg-muted) !important;
+  border: 1px solid var(--border-strong) !important; box-shadow: none !important;
 }
-.gradio-container button.secondary:hover, button.secondary:hover { background: var(--bg-elev-strong) !important; border-color: var(--border-strong) !important; }
+.gradio-container button.secondary:hover, button.secondary:hover { background: var(--bg-elev) !important; color: var(--fg) !important; border-color: var(--border-strong) !important; }
 
 button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !important; padding: 7px 11px !important; }
 
@@ -1027,7 +1526,7 @@ STATEMENT_SOURCE_HEADER_HTML = """
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
     Bank Statement
   </span>
-  <span class="chex-card-kicker">paste · pdf · csv</span>
+  <span class="chex-card-kicker">paste · pdf · csv · txt · xlsx · ofx</span>
 </div>
 """
 
@@ -1101,22 +1600,64 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                         with gr.Tabs():
                             with gr.Tab("Paste text"):
                                 bank_paste_input = gr.Textbox(
-                                    label="Bank statement text",
+                                    label="Bank statement text (supports multiple)",
                                     lines=20,
-                                    placeholder="Paste your bank statement here, or load the sample below…",
+                                    placeholder=(
+                                        "Paste one or more bank statements here.\n\n"
+                                        "If you paste multiple statements, separate them with a line containing only "
+                                        "`---` (3+ dashes)."
+                                        "\n\nOr load the sample below…"
+                                    ),
                                     show_label=False,
                                 )
                                 btn_load_statement = gr.Button("Load sample statement", variant="secondary", size="sm")
                             with gr.Tab("Upload PDF"):
-                                bank_pdf_input = gr.File(label="PDF bank statement", file_types=[".pdf"])
+                                bank_pdf_input = gr.File(
+                                    label="PDF bank statement (multiple allowed)",
+                                    file_types=[".pdf"],
+                                    file_count="multiple",
+                                )
+                                bank_pdf_password_input = gr.Textbox(
+                                    label="PDF password (optional)",
+                                    type="password",
+                                    placeholder="Leave blank if PDF is not encrypted",
+                                    show_label=False,
+                                )
                             with gr.Tab("Upload CSV"):
-                                bank_csv_input = gr.File(label="CSV bank statement", file_types=[".csv"])
+                                bank_csv_input = gr.File(
+                                    label="CSV bank statement (multiple allowed)",
+                                    file_types=[".csv"],
+                                    file_count="multiple",
+                                )
+                            with gr.Tab("Upload TXT"):
+                                bank_txt_input = gr.File(
+                                    label="TXT bank statement (multiple allowed)",
+                                    file_types=[".txt", ".text"],
+                                    file_count="multiple",
+                                )
+                            with gr.Tab("Upload Excel"):
+                                bank_xlsx_input = gr.File(
+                                    label="Excel bank statement (.xlsx, multiple allowed)",
+                                    file_types=[".xlsx"],
+                                    file_count="multiple",
+                                )
+                            with gr.Tab("Upload OFX / QFX"):
+                                bank_ofx_input = gr.File(
+                                    label="OFX / QFX bank statement (multiple allowed)",
+                                    file_types=[".ofx", ".qfx"],
+                                    file_count="multiple",
+                                )
 
                 with gr.Column(scale=11):
                     with gr.Group():
                         gr.HTML(STATEMENT_RESULTS_HEADER_HTML)
                         analyse_stmt_btn = gr.Button("Analyse statement", variant="primary")
                         summary_output = gr.Markdown(value="*Run 'Analyse statement' to generate a financial summary.*")
+                        with gr.Row():
+                            export_csv_btn = gr.Button("Export CSV", variant="secondary", size="sm")
+                            export_pdf_btn = gr.Button("Export PDF", variant="secondary", size="sm")
+                        export_status = gr.Markdown(value="")
+                        export_file = gr.File(label="Download", interactive=False)
                         gr.HTML('<div class="chex-divider"></div>')
                         gr.HTML('<span class="chex-section-kicker">Ask a question</span>')
                         with gr.Row():
@@ -1134,6 +1675,11 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
                         bank_reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
 
             bank_statement_state = gr.State("")
+            bank_summary_state = gr.State("")
+            # Hidden JSON output for `gradio_client` API usage.
+            bank_api_output = gr.JSON(visible=False)
+            bank_api_question = gr.Textbox(visible=False)
+            bank_api_btn = gr.Button(visible=False)
 
         # ── Tab 03: Benchmark ──────────────────────────────────────────── #
         with gr.Tab("03  Benchmark"):
@@ -1170,19 +1716,40 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
+        api_name="contract_analyze",
     )
     question_input.submit(
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
+        api_name="contract_analyze",
     )
 
     btn_load_statement.click(fn=lambda: SAMPLE_STATEMENT, inputs=[], outputs=[bank_paste_input])
 
     analyse_stmt_btn.click(
         fn=analyse_bank_statement,
-        inputs=[bank_paste_input, bank_pdf_input, bank_csv_input],
-        outputs=[summary_output, bank_statement_state],
+        inputs=[
+            bank_paste_input,
+            bank_pdf_input,
+            bank_pdf_password_input,
+            bank_csv_input,
+            bank_txt_input,
+            bank_xlsx_input,
+            bank_ofx_input,
+        ],
+        outputs=[summary_output, bank_statement_state, bank_summary_state],
+    )
+
+    export_csv_btn.click(
+        fn=export_bank_summary_csv,
+        inputs=[bank_summary_state],
+        outputs=[export_file, export_status],
+    )
+    export_pdf_btn.click(
+        fn=export_bank_summary_pdf,
+        inputs=[bank_summary_state],
+        outputs=[export_file, export_status],
     )
 
     bank_ask_btn.click(
@@ -1194,6 +1761,59 @@ with gr.Blocks(title="CHEX — Document Intelligence") as demo:
         fn=bank_qa,
         inputs=[bank_statement_state, bank_question_input],
         outputs=[bank_label_display, bank_answer_output, bank_citation_output, bank_reasoning_output],
+    )
+
+    def bank_analyze_api(
+        paste_text: str,
+        pdf_files,
+        pdf_password: str | None,
+        csv_files,
+        txt_files,
+        xlsx_files,
+        ofx_files,
+        question: str | None,
+    ) -> dict:
+        summary_md, combined_text, summary_json = analyse_bank_statement(
+            paste_text,
+            pdf_files,
+            pdf_password,
+            csv_files,
+            txt_files,
+            xlsx_files,
+            ofx_files,
+        )
+
+        qa: dict | None = None
+        if (question or "").strip():
+            label_html, answer, citation, reasoning = bank_qa(combined_text, (question or "").strip())
+            qa = {
+                "label_html": label_html,
+                "answer": answer,
+                "citation": citation,
+                "reasoning": reasoning,
+            }
+
+        return {
+            "summary_markdown": summary_md,
+            "combined_text": combined_text,
+            "summary_json": summary_json,
+            "qa": qa,
+        }
+
+    bank_api_btn.click(
+        fn=bank_analyze_api,
+        inputs=[
+            bank_paste_input,
+            bank_pdf_input,
+            bank_pdf_password_input,
+            bank_csv_input,
+            bank_txt_input,
+            bank_xlsx_input,
+            bank_ofx_input,
+            bank_api_question,
+        ],
+        outputs=[bank_api_output],
+        api_name="bank_analyze",
     )
 
 

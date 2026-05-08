@@ -129,7 +129,7 @@ def build_chat_messages(contract_text: str, question: str) -> list[dict[str, str
 
 BANK_STATEMENT_SYSTEM_PROMPT = """\
 You are a financial analysis assistant specialising in bank statement review. \
-Given a bank statement (plain text, CSV-derived, or PDF-extracted) and either a \
+Given a bank statement (plain text, CSV/Excel-derived, OFX/QFX-derived, or PDF-extracted) and either a \
 summary request or a specific question, produce a single JSON object.
 
 For SUMMARY mode (question is "SUMMARISE"):

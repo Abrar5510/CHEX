@@ -1,6 +1,13 @@
 """
-BankStatementAnalyzer — extracts text from bank statements (PDF, CSV, plain text)
+BankStatementAnalyzer — converts bank statements in multiple formats to plain text
 and runs summarisation or Q&A using the CHEX fine-tuned model.
+
+Supported input formats:
+- PDF (.pdf)
+- CSV (.csv)
+- Plain text (.txt / .text)
+- Excel (.xlsx)
+- OFX/QFX (.ofx / .qfx) (lightweight tag-based extraction)
 """
 
 from __future__ import annotations
@@ -33,8 +40,14 @@ STRICT_SUFFIX = (
 # Text extraction helpers
 # ---------------------------------------------------------------------------
 
-def extract_text_from_pdf(file_path: str | Path) -> str:
-    """Extract all text from a PDF using pdfplumber."""
+def extract_text_from_pdf(
+    file_path: str | Path, password: Optional[str] = None
+) -> str:
+    """
+    Extract all text from a (potentially encrypted) PDF using pdfplumber.
+
+    If the PDF is password-protected, provide `password`.
+    """
     if importlib.util.find_spec("pdfplumber") is None:
         raise ImportError(
             "pdfplumber is required for PDF support. Install it with: pip install pdfplumber"
@@ -42,11 +55,20 @@ def extract_text_from_pdf(file_path: str | Path) -> str:
     import pdfplumber  # type: ignore
 
     text_parts: list[str] = []
-    with pdfplumber.open(str(file_path)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
+    # pdfplumber's `open` supports forwarding `password` to pdfminer in most versions.
+    # We keep a fallback for older versions where the argument may not exist.
+    try:
+        with pdfplumber.open(str(file_path), password=password or "") as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+    except TypeError:
+        with pdfplumber.open(str(file_path)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
     return "\n".join(text_parts)
 
 
@@ -72,6 +94,144 @@ def parse_csv(file_path: str | Path) -> str:
 
     header = ", ".join(df.columns.tolist())
     return f"{header}\n" + "\n".join(lines)
+
+
+def parse_txt(file_path: str | Path) -> str:
+    """
+    Read a plain text bank statement into a model-friendly string.
+
+    Note: for multi-statement paste-style inputs, clients should split on their
+    own delimiter; this function just returns the file contents.
+    """
+    p = Path(file_path)
+    try:
+        return p.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # Best-effort fallback for odd encodings.
+        return p.read_text(encoding="utf-8", errors="replace")
+
+
+def parse_xlsx(file_path: str | Path) -> str:
+    """
+    Read the first sheet from an Excel file and format it as one transaction
+    per line (similar to `parse_csv`).
+    """
+    if importlib.util.find_spec("pandas") is None:
+        raise ImportError("pandas is required for XLSX support. Install it with: pip install pandas")
+    import pandas as pd  # type: ignore
+
+    # Let pandas pick the engine; openpyxl is a requirement for .xlsx.
+    df = pd.read_excel(str(file_path), sheet_name=0)
+    if df is None or df.empty:
+        return ""
+
+    # Normalise column names to lower-case for robust detection
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    lines: list[str] = []
+    for _, row in df.iterrows():
+        parts = [str(v).strip() for v in row.values if str(v).strip() not in ("", "nan", "NaN")]
+        lines.append(", ".join(parts))
+
+    header = ", ".join(df.columns.tolist())
+    return f"{header}\n" + "\n".join(lines)
+
+
+def _format_ofx_date(d: str) -> str:
+    d = (d or "").strip()
+    if len(d) == 8 and d.isdigit():
+        return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+    return d
+
+
+def parse_ofx(file_path: str | Path) -> str:
+    """
+    Lightweight OFX/QFX extraction.
+
+    OFX is XML-like tag syntax but often not strict XML; we use regex to capture
+    transaction blocks and convert them to a consistent text format.
+    """
+    p = Path(file_path)
+    raw = p.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("utf-8", errors="replace")
+
+    # OFX commonly wraps each transaction as: <STMTTRN> ... </STMTTRN>
+    blocks = re.findall(r"<STMTTRN>(.*?)</STMTTRN>", text, flags=re.IGNORECASE | re.DOTALL)
+    if not blocks:
+        # Some variants nest transactions differently; fall back to returning the whole file.
+        # We still try to keep it useful by stripping extra whitespace.
+        return text.strip()
+
+    def get_tag(block: str, tag: str) -> str:
+        m = re.search(rf"<{tag}>([^<]*)", block, flags=re.IGNORECASE)
+        return (m.group(1) if m else "").strip()
+
+    lines: list[str] = []
+    for b in blocks:
+        dt = get_tag(b, "DTPOSTED") or get_tag(b, "DTTRAN")
+        name = get_tag(b, "NAME") or get_tag(b, "PAYEE")
+        memo = get_tag(b, "MEMO") or get_tag(b, "TRNTYPE")
+        amt = get_tag(b, "TRNAMT") or get_tag(b, "AMOUNT")
+
+        if not any([dt, name, memo, amt]):
+            continue
+
+        dt = _format_ofx_date(dt)
+        desc_parts = [p for p in [name, memo] if p]
+        desc = " - ".join(desc_parts) if desc_parts else "Transaction"
+        lines.append(f"{dt}, {desc}, {amt}".strip(", "))
+
+    header = "Date, Description, Amount"
+    return header + "\n" + "\n".join(lines) if lines else header + "\n" + text.strip()[:5000]
+
+
+def detect_statement_format(file_path: str | Path) -> str:
+    """
+    Return a best-effort statement format string for dispatcher logic.
+    """
+    suffix = Path(file_path).suffix.lower()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix == ".csv":
+        return "csv"
+    if suffix in (".txt", ".text"):
+        return "txt"
+    if suffix in (".xlsx",):
+        return "xlsx"
+    if suffix in (".ofx", ".qfx"):
+        return "ofx"
+    return "unknown"
+
+
+def extract_text_from_file(
+    file_path: str | Path, *, password: Optional[str] = None
+) -> str:
+    """
+    Convert a supported statement file into plain text for the model.
+    """
+    fmt = detect_statement_format(file_path)
+
+    if fmt == "pdf":
+        return extract_text_from_pdf(file_path, password=password)
+    if fmt == "csv":
+        return parse_csv(file_path)
+    if fmt == "txt":
+        return parse_txt(file_path)
+    if fmt == "xlsx":
+        return parse_xlsx(file_path)
+    if fmt == "ofx":
+        return parse_ofx(file_path)
+
+    # Content fallback for OFX/QFX-ish files without/unknown extensions.
+    raw_head = Path(file_path).read_bytes()[:4096]
+    head = raw_head.decode("utf-8", errors="replace").upper()
+    if "<OFX" in head or "<QFX" in head:
+        return parse_ofx(file_path)
+
+    raise ValueError(f"Unsupported statement format for file: {file_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +297,21 @@ class BankStatementAnalyzer:
     # Public text-extraction API                                           #
     # ------------------------------------------------------------------ #
 
-    def extract_text_from_pdf(self, file_path: str | Path) -> str:
-        return extract_text_from_pdf(file_path)
+    def extract_text_from_pdf(
+        self, file_path: str | Path, password: Optional[str] = None
+    ) -> str:
+        return extract_text_from_pdf(file_path, password=password)
 
     def parse_csv(self, file_path: str | Path) -> str:
         return parse_csv(file_path)
+
+    def extract_text_from_file(
+        self, file_path: str | Path, *, password: Optional[str] = None
+    ) -> str:
+        """
+        Unified extraction entrypoint for supported statement file formats.
+        """
+        return extract_text_from_file(file_path, password=password)
 
     # ------------------------------------------------------------------ #
     # Internal inference helpers                                           #
