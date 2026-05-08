@@ -1213,8 +1213,6 @@ STATEMENT_RESULTS_HEADER_HTML = """
 
 with gr.Blocks(
     title="CHEX — Document Intelligence",
-    theme=gr.themes.Base(),
-    css=CHEX_CSS,
 ) as demo:
 
     # ── Topbar ──────────────────────────────────────────────────────────── #
@@ -1433,4 +1431,4 @@ with gr.Blocks(
 
 
 if __name__ == "__main__":
-    demo.launch(show_error=True)
+    demo.launch(show_error=True, theme=gr.themes.Base(), css=CHEX_CSS, ssr_mode=False)
