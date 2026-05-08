@@ -42,8 +42,13 @@ class ContractAnalyzer:
     Load a CHEX fine-tuned (or base) Qwen model and answer contract questions.
 
     Args:
-        model_path: Local checkpoint directory or HuggingFace Hub repo ID.
-        device:     "auto" lets HF choose; pass "cuda" or "cpu" to override.
+        model_path:  Local checkpoint / HF repo for the merged model *or* a LoRA
+                     adapter repo (when base_model is also provided).
+        base_model:  When set, model_path is treated as a LoRA adapter and loaded
+                     on top of this base model via PEFT. The adapter's weight shapes
+                     must match the base — a 9B-trained adapter cannot be loaded on
+                     a 0.8B base without re-training (shape mismatch will raise).
+        device:      "auto" lets HF choose; pass "cuda" or "cpu" to override.
     """
 
     MAX_CONTRACT_TOKENS = 8192
@@ -52,24 +57,35 @@ class ContractAnalyzer:
         "Do not include any text before or after the JSON."
     )
 
-    def __init__(self, model_path: str, device: str = "auto") -> None:
+    def __init__(
+        self,
+        model_path: str,
+        base_model: Optional[str] = None,
+        device: str = "auto",
+    ) -> None:
         self._model_path = model_path
+        self._base_model = base_model
         self._device = device
-        self._pipe, self._tokenizer = self._load_pipeline(model_path, device)
-        print(f"ContractAnalyzer ready. Model: {model_path}")
+        self._pipe, self._tokenizer = self._load_pipeline(model_path, base_model, device)
+        label = f"base={base_model} + adapter={model_path}" if base_model else model_path
+        print(f"ContractAnalyzer ready. {label}")
 
-    def _load_pipeline(self, model_path: str, device: str):
+    def _load_pipeline(self, model_path: str, base_model: Optional[str], device: str):
         from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline  # type: ignore
 
         rocm = _is_rocm()
         bnb_available = importlib.util.find_spec("bitsandbytes") is not None
 
-        print(f"Loading tokenizer from: {model_path}")
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        # When a base model is given, load it first then apply the LoRA adapter.
+        # Otherwise treat model_path as a fully merged checkpoint.
+        weights_source = base_model if base_model else model_path
+
+        print(f"Loading tokenizer from: {weights_source}")
+        tokenizer = AutoTokenizer.from_pretrained(weights_source, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        print(f"Loading model from: {model_path}")
+        print(f"Loading base model from: {weights_source}")
         if bnb_available:
             from transformers import BitsAndBytesConfig  # type: ignore
 
@@ -80,7 +96,7 @@ class ContractAnalyzer:
                 bnb_4bit_use_double_quant=True,
             )
             model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                weights_source,
                 quantization_config=bnb_config,
                 device_map="auto" if device == "auto" else device,
                 trust_remote_code=True,
@@ -89,12 +105,27 @@ class ContractAnalyzer:
         else:
             dtype = torch.float16 if rocm else torch.bfloat16
             model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                weights_source,
                 torch_dtype=dtype,
                 device_map="auto" if device == "auto" else device,
                 trust_remote_code=True,
             )
             print(f"  Loaded in {'fp16' if rocm else 'bf16'} (no quantization)")
+
+        if base_model:
+            # NOTE: adapter must have been trained on a model with the same
+            # architecture as base_model. Loading a 9B-trained adapter onto a
+            # 0.8B base will raise a shape-mismatch error here.
+            try:
+                from peft import PeftModel  # type: ignore
+            except ImportError as exc:
+                raise ImportError(
+                    "peft is required to load a LoRA adapter. "
+                    "Install it with: pip install peft"
+                ) from exc
+            print(f"Applying LoRA adapter from: {model_path}")
+            model = PeftModel.from_pretrained(model, model_path)
+            print("  Adapter applied.")
 
         pipe = pipeline(
             "text-generation",
@@ -205,12 +236,13 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run CHEX Document Intelligence inference on a document file.")
-    parser.add_argument("--model_path", required=True, help="Model path or HF Hub repo")
+    parser.add_argument("--model_path", required=True, help="Merged model path/repo, or LoRA adapter repo when --base_model is set")
+    parser.add_argument("--base_model", default=None, help="Base model to load before applying the LoRA adapter")
     parser.add_argument("--contract_file", type=Path, required=True, help="Contract .txt file")
     parser.add_argument("--question", required=True, help="Question about the contract")
     args = parser.parse_args()
 
-    analyzer = ContractAnalyzer(model_path=args.model_path)
+    analyzer = ContractAnalyzer(model_path=args.model_path, base_model=args.base_model)
     contract = Path(args.contract_file).read_text(encoding="utf-8")
     result = analyzer.analyze(contract, args.question)
 

@@ -1,6 +1,6 @@
 """
 CHEX - Document Intelligence
-HuggingFace Spaces Gradio Demo
+HuggingFace Spaces Gradio Demo — fully self-contained (no relative imports)
 
 Tab 1: Analyze Contract — paste a contract, ask a question, get a structured answer
 Tab 2: Benchmark Demo — side-by-side table showing base model hallucinations vs CHEX
@@ -9,41 +9,249 @@ Tab 3: Analyse Bank Statement — paste / upload a bank statement, get a summary
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
-import sys
+import re
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 import gradio as gr
+from pydantic import BaseModel
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# ---------------------------------------------------------------------------
+# Schema (inlined from data/schema.py)
+# ---------------------------------------------------------------------------
+
+class Label(str, Enum):
+    GROUNDED = "GROUNDED"
+    ABSENT = "ABSENT"
+    CONTRADICTS_PRIOR = "CONTRADICTS_PRIOR"
+
+
+class ModelOutput(BaseModel):
+    question: str
+    label: Label
+    answer: Optional[str] = None
+    citation: Optional[str] = None
+    reasoning: str
+
+
+class BankStatementSummary(BaseModel):
+    total_credits: Optional[str] = None
+    total_debits: Optional[str] = None
+    largest_transaction: Optional[str] = None
+    recurring_payments: Optional[list[str]] = None
+    flags: Optional[list[str]] = None
+    raw_reasoning: str
+
+
+# ---------------------------------------------------------------------------
+# Prompt templates (inlined from training/prompt_template.py)
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT = """\
+You are a contract analysis assistant specializing in detecting hallucinations \
+and calibrated uncertainty. Given a contract text and a question about a specific \
+clause, output a single JSON object with exactly these fields:
+
+  question  : the question asked (copy verbatim)
+  label     : one of GROUNDED, ABSENT, or CONTRADICTS_PRIOR
+               - GROUNDED         : the information exists verbatim in the contract
+               - ABSENT           : the contract does not contain this clause at all
+               - CONTRADICTS_PRIOR: the contract contains a clause but it deviates \
+from standard legal terms (e.g., inverted obligations, non-standard timeframes)
+  answer    : the answer text if GROUNDED or CONTRADICTS_PRIOR, null if ABSENT
+  citation  : the exact verbatim span from the contract that supports the answer, \
+null if ABSENT
+  reasoning : one sentence explaining your classification
+
+Output ONLY the JSON object. No preamble, no markdown fences, no text outside the JSON.
+
+### Example 1 — GROUNDED
+
+[CONTRACT]
+This Software License Agreement ("Agreement") is entered into as of January 1, 2024, \
+between TechVision Inc. ("Licensor") and GlobalCorp Ltd. ("Licensee"). The Agreement \
+shall remain in effect for a period of two (2) years from the Effective Date, unless \
+earlier terminated pursuant to Section 8. Licensor grants Licensee a non-exclusive, \
+non-transferable license to use the Software solely for Licensee's internal business \
+purposes.
+[/CONTRACT]
+
+Question: What is the duration of this agreement?
+
+{"question": "What is the duration of this agreement?", "label": "GROUNDED", \
+"answer": "Two years from the Effective Date", \
+"citation": "remain in effect for a period of two (2) years from the Effective Date", \
+"reasoning": "The contract explicitly specifies a two-year term starting from the Effective Date."}
+
+### Example 2 — ABSENT
+
+[CONTRACT]
+The Licensee shall pay a monthly fee of five hundred dollars ($500.00). Payment is due \
+on the first business day of each calendar month. Late payments shall accrue interest \
+at a rate of one and one-half percent (1.5%) per month. Licensee shall maintain \
+accurate records of all uses of the Software.
+[/CONTRACT]
+
+Question: Does this agreement include a limitation of liability clause?
+
+{"question": "Does this agreement include a limitation of liability clause?", \
+"label": "ABSENT", "answer": null, "citation": null, \
+"reasoning": "No limitation of liability clause appears anywhere in the provided contract text."}
+
+### Example 3 — CONTRADICTS_PRIOR
+
+[CONTRACT]
+This Non-Disclosure Agreement is made between AlphaTech Solutions ("Discloser") and \
+Beta Dynamics Corp. ("Recipient"). The Recipient shall not disclose Confidential \
+Information to any third party. NON-COMPETE: The Recipient shall engage in any \
+business activity that competes with the Discloser's primary operations during the \
+term and for a period of 24 months thereafter. The Recipient shall not take any \
+steps to protect Discloser's trade secrets.
+[/CONTRACT]
+
+Question: Does this agreement restrict the Recipient from competing with the Discloser?
+
+{"question": "Does this agreement restrict the Recipient from competing with the Discloser?", \
+"label": "CONTRADICTS_PRIOR", \
+"answer": "The non-compete clause has inverted obligations — it permits competition rather than prohibiting it", \
+"citation": "The Recipient shall engage in any business activity that competes with the Discloser's primary operations", \
+"reasoning": "The clause uses 'shall engage' instead of 'shall not engage', inverting the standard non-compete obligation."}
+"""
+
+BANK_SYSTEM_PROMPT = """\
+You are a financial analysis assistant specialising in bank statement review. \
+Given a bank statement (plain text, CSV-derived, or PDF-extracted) and either a \
+summary request or a specific question, produce a single JSON object.
+
+For SUMMARY mode (question is "SUMMARISE"):
+Output a JSON object with exactly these fields:
+  total_credits      : total money received (e.g. "£3,420.50") or null
+  total_debits       : total money spent (e.g. "£2,105.30") or null
+  largest_transaction: description + amount of the single largest transaction or null
+  recurring_payments : list of detected recurring charges (e.g. ["Netflix £9.99", "Gym £35.00"]) or []
+  flags              : list of unusual or suspicious items (e.g. ["Large cash withdrawal £800"]) or []
+  raw_reasoning      : one sentence summarising your analysis
+
+For Q&A mode (any other question), output a JSON object with exactly these fields:
+  question  : the question asked (copy verbatim)
+  label     : one of GROUNDED, ABSENT, or CONTRADICTS_PRIOR
+  answer    : the answer text if GROUNDED or CONTRADICTS_PRIOR, null if ABSENT
+  citation  : the exact verbatim span from the statement, null if ABSENT
+  reasoning : one sentence explaining your classification
+
+Output ONLY the JSON object. No preamble, no markdown fences, no text outside the JSON.
+"""
+
+STRICT_SUFFIX = (
+    "\n\nIMPORTANT: You must output ONLY a valid JSON object. "
+    "Do not include any text before or after the JSON."
+)
+
+
+def _build_contract_messages(contract_text: str, question: str) -> list[dict]:
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"[CONTRACT]\n{contract_text}\n[/CONTRACT]\n\nQuestion: {question}"},
+    ]
+
+
+def _build_bank_messages(statement_text: str, question: str) -> list[dict]:
+    return [
+        {"role": "system", "content": BANK_SYSTEM_PROMPT},
+        {"role": "user", "content": f"[STATEMENT]\n{statement_text}\n[/STATEMENT]\n\nQuestion: {question}"},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# JSON parsing helpers
+# ---------------------------------------------------------------------------
+
+def _extract_json_str(raw_text: str) -> str:
+    match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}", raw_text, re.DOTALL)
+    if not match:
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object found in model output: {raw_text[:300]!r}")
+    return match.group()
+
+
+def _parse_model_output(raw_text: str, question: str) -> ModelOutput:
+    json_str = _extract_json_str(raw_text)
+    return ModelOutput.model_validate_json(json_str)
+
+
+def _parse_summary(raw_text: str) -> BankStatementSummary:
+    data = json.loads(_extract_json_str(raw_text))
+    return BankStatementSummary(
+        total_credits=data.get("total_credits"),
+        total_debits=data.get("total_debits"),
+        largest_transaction=data.get("largest_transaction"),
+        recurring_payments=data.get("recurring_payments") or [],
+        flags=data.get("flags") or [],
+        raw_reasoning=data.get("raw_reasoning", ""),
+    )
+
 
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 
-MODEL_PATH = os.environ.get(
-    "HF_MODEL_REPO", "PLACEHOLDER/chex-document-intelligence"
-)
-SAMPLE_DIR = Path(__file__).parent / "sample_contracts"
-STATEMENT_DIR = Path(__file__).parent / "sample_statements"
+MLX_SERVER_URL = os.environ.get("MLX_SERVER_URL", "").rstrip("/")
+SAMPLE_DIR     = Path(__file__).parent / "sample_contracts"
+STATEMENT_DIR  = Path(__file__).parent / "sample_statements"
 
-analyzer = None
 model_load_error: Optional[str] = None
 
-bank_analyzer = None
+if not MLX_SERVER_URL:
+    model_load_error = "MLX_SERVER_URL not set. Set it in Space secrets to your Mac's ngrok URL."
+    print(f"WARNING: {model_load_error}")
+else:
+    print(f"MLX server configured at: {MLX_SERVER_URL}")
 
-try:
-    from serving.inference import ContractAnalyzer  # type: ignore
-    from serving.bank_statement import BankStatementAnalyzer  # type: ignore
 
-    analyzer = ContractAnalyzer(model_path=MODEL_PATH)
-    bank_analyzer = BankStatementAnalyzer(contract_analyzer=analyzer)
-    print(f"Model loaded successfully: {MODEL_PATH}")
-except Exception as e:
-    model_load_error = str(e)
-    print(f"WARNING: Model failed to load: {e}")
-    print("Demo is running in preview mode — analysis will return a placeholder response.")
+# ---------------------------------------------------------------------------
+# Inference helpers
+# ---------------------------------------------------------------------------
+
+MAX_CHARS = 32000  # rough character limit (~8k tokens) to keep requests fast
+
+
+def _truncate(text: str) -> str:
+    if len(text) > MAX_CHARS:
+        print(f"WARNING: Text truncated from {len(text)} to {MAX_CHARS} chars.")
+        return text[:MAX_CHARS]
+    return text
+
+
+def _apply_messages(messages: list[dict], strict: bool = False) -> list[dict]:
+    if strict:
+        messages = list(messages)
+        messages[-1] = dict(messages[-1])
+        messages[-1]["content"] += STRICT_SUFFIX
+    return messages
+
+
+def _run_inference(messages: list[dict]) -> str:
+    import urllib.request
+    payload = json.dumps({
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.0,
+    }).encode()
+    req = urllib.request.Request(
+        f"{MLX_SERVER_URL}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read())
+    return data["choices"][0]["message"]["content"]
+
 
 # ---------------------------------------------------------------------------
 # Sample contract content
@@ -60,12 +268,22 @@ SOFTWARE_LICENSE = _read_sample("software_license.txt")
 NDA = _read_sample("nda.txt")
 SERVICE_AGREEMENT = _read_sample("service_agreement.txt")
 
-# Suggested questions for each sample contract
 SAMPLE_QUESTIONS = {
     "software_license.txt": "What is the limitation of liability in this agreement?",
     "nda.txt": "Does this agreement include a non-compete clause?",
     "service_agreement.txt": "Does this contract include a termination for convenience clause?",
 }
+
+
+def _read_sample_statement(filename: str) -> str:
+    p = STATEMENT_DIR / filename
+    if p.exists():
+        return p.read_text(encoding="utf-8")
+    return f"[Sample statement '{filename}' not found. Place it in demo/sample_statements/]"
+
+
+SAMPLE_STATEMENT = _read_sample_statement("sample_statement.txt")
+
 
 # ---------------------------------------------------------------------------
 # Label badge HTML
@@ -96,73 +314,61 @@ def format_label_html(label: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Analysis handler
+# Analysis handlers
 # ---------------------------------------------------------------------------
 
-def analyze_contract(
-    contract_text: str,
-    question: str,
-) -> tuple[str, str, str, str]:
-    """
-    Returns (label_html, answer_text, citation_text, reasoning_text).
-    """
+def analyze_contract(contract_text: str, question: str) -> tuple[str, str, str, str]:
     if not contract_text.strip():
         return format_label_html("N/A"), "", "", "Please paste a contract above."
     if not question.strip():
         return format_label_html("N/A"), "", "", "Please enter a question."
-
-    if analyzer is None:
+    if not MLX_SERVER_URL:
         return (
             format_label_html("N/A"),
             "Model not loaded",
             "",
-            f"Model failed to load: {model_load_error}. "
-            "Set HF_MODEL_REPO in Space secrets to the correct model repo.",
+            f"Model failed to load: {model_load_error}.",
         )
 
-    try:
-        result = analyzer.analyze(contract_text, question)
-        label_html = format_label_html(result.label.value)
-        answer = result.answer if result.answer else "(none — clause is absent or not applicable)"
-        citation = result.citation if result.citation else "(none)"
-        reasoning = result.reasoning
-        return label_html, answer, citation, reasoning
-    except Exception as e:
-        return format_label_html("ERROR"), "", "", f"Inference error: {e}"
+    contract_text = _truncate(contract_text)
+    messages = _build_contract_messages(contract_text, question)
 
-
-# ---------------------------------------------------------------------------
-# Sample bank statement
-# ---------------------------------------------------------------------------
-
-def _read_sample_statement(filename: str) -> str:
-    p = STATEMENT_DIR / filename
-    if p.exists():
-        return p.read_text(encoding="utf-8")
-    return f"[Sample statement '{filename}' not found. Place it in demo/sample_statements/]"
-
-
-SAMPLE_STATEMENT = _read_sample_statement("sample_statement.txt")
-
-
-# ---------------------------------------------------------------------------
-# Bank statement handlers
-# ---------------------------------------------------------------------------
-
-def _get_statement_text(
-    paste_text: str,
-    pdf_file,
-    csv_file,
-) -> tuple[str, str]:
-    """
-    Resolve whichever input was provided and return (statement_text, error_msg).
-    Priority: PDF > CSV > paste text.
-    """
-    if pdf_file is not None:
-        if bank_analyzer is None:
-            return "", "Model not loaded — PDF extraction unavailable."
+    for attempt in range(2):
+        msgs = _apply_messages(messages, strict=(attempt == 1))
         try:
-            text = bank_analyzer.extract_text_from_pdf(pdf_file)
+            raw = _run_inference(msgs)
+            result = _parse_model_output(raw, question)
+            label_html = format_label_html(result.label.value)
+            answer = result.answer or "(none — clause is absent or not applicable)"
+            citation = result.citation or "(none)"
+            return label_html, answer, citation, result.reasoning
+        except Exception as e:
+            if attempt == 0:
+                print(f"  Parse attempt 1 failed ({e}). Retrying with stricter prompt...")
+            else:
+                print(f"  Parse attempt 2 failed ({e}). Returning safe fallback.")
+
+    return (
+        format_label_html("ABSENT"),
+        "(none — clause is absent or not applicable)",
+        "(none)",
+        "Model output could not be parsed as valid JSON after two attempts.",
+    )
+
+
+def _get_statement_text(paste_text: str, pdf_file, csv_file) -> tuple[str, str]:
+    if pdf_file is not None:
+        try:
+            if importlib.util.find_spec("pdfplumber") is None:
+                return "", "pdfplumber not installed."
+            import pdfplumber
+            text_parts = []
+            with pdfplumber.open(str(pdf_file)) as pdf:
+                for page in pdf.pages:
+                    t = page.extract_text()
+                    if t:
+                        text_parts.append(t)
+            text = "\n".join(text_parts)
             if not text.strip():
                 return "", "PDF was uploaded but no text could be extracted."
             return text, ""
@@ -170,11 +376,15 @@ def _get_statement_text(
             return "", f"PDF extraction error: {e}"
 
     if csv_file is not None:
-        if bank_analyzer is None:
-            return "", "Model not loaded — CSV parsing unavailable."
         try:
-            text = bank_analyzer.parse_csv(csv_file)
-            return text, ""
+            import pandas as pd
+            df = pd.read_csv(str(csv_file))
+            df.columns = [c.strip().lower() for c in df.columns]
+            lines = []
+            for _, row in df.iterrows():
+                parts = [str(v).strip() for v in row.values if str(v).strip() not in ("", "nan")]
+                lines.append(", ".join(parts))
+            return ", ".join(df.columns.tolist()) + "\n" + "\n".join(lines), ""
         except Exception as e:
             return "", f"CSV parsing error: {e}"
 
@@ -184,52 +394,48 @@ def _get_statement_text(
     return "", "Please paste a bank statement or upload a PDF / CSV file."
 
 
-def analyse_bank_statement(
-    paste_text: str,
-    pdf_file,
-    csv_file,
-) -> tuple[str, str]:
-    """
-    Returns (summary_markdown, extracted_text_for_qa).
-    """
+def analyse_bank_statement(paste_text: str, pdf_file, csv_file) -> tuple[str, str]:
     statement_text, error = _get_statement_text(paste_text, pdf_file, csv_file)
     if error:
         return f"**Error:** {error}", ""
-
-    if analyzer is None:
+    if not MLX_SERVER_URL:
         return (
-            "**Model not loaded.** "
-            f"Set `HF_MODEL_REPO` in Space secrets. Error: {model_load_error}",
+            f"**Inference client not initialised.** Error: {model_load_error}",
             statement_text,
         )
 
-    try:
-        summary = bank_analyzer.summarize(statement_text)
-        lines = ["## Statement Summary", ""]
-        lines.append(f"**Total Credits:** {summary.total_credits or 'N/A'}")
-        lines.append(f"**Total Debits:** {summary.total_debits or 'N/A'}")
-        lines.append(f"**Largest Transaction:** {summary.largest_transaction or 'N/A'}")
-        if summary.recurring_payments:
-            lines.append("\n**Recurring Payments:**")
-            for p in summary.recurring_payments:
-                lines.append(f"- {p}")
-        if summary.flags:
-            lines.append("\n**Flags / Unusual Activity:**")
-            for f in summary.flags:
-                lines.append(f"- {f}")
-        lines.append(f"\n*{summary.raw_reasoning}*")
-        return "\n".join(lines), statement_text
-    except Exception as e:
-        return f"**Summarisation error:** {e}", statement_text
+    statement_text = _truncate(statement_text)
+    messages = _build_bank_messages(statement_text, "SUMMARISE")
+
+    for attempt in range(2):
+        msgs = _apply_messages(messages, strict=(attempt == 1))
+        try:
+            raw = _run_inference(msgs)
+            summary = _parse_summary(raw)
+            lines = ["## Statement Summary", ""]
+            lines.append(f"**Total Credits:** {summary.total_credits or 'N/A'}")
+            lines.append(f"**Total Debits:** {summary.total_debits or 'N/A'}")
+            lines.append(f"**Largest Transaction:** {summary.largest_transaction or 'N/A'}")
+            if summary.recurring_payments:
+                lines.append("\n**Recurring Payments:**")
+                for p in summary.recurring_payments:
+                    lines.append(f"- {p}")
+            if summary.flags:
+                lines.append("\n**Flags / Unusual Activity:**")
+                for f in summary.flags:
+                    lines.append(f"- {f}")
+            lines.append(f"\n*{summary.raw_reasoning}*")
+            return "\n".join(lines), statement_text
+        except Exception as e:
+            if attempt == 0:
+                print(f"  Summary parse attempt 1 failed ({e}). Retrying...")
+            else:
+                print(f"  Summary parse attempt 2 failed ({e}). Returning error.")
+
+    return "**Summarisation error:** could not parse model output.", statement_text
 
 
-def bank_qa(
-    statement_text: str,
-    question: str,
-) -> tuple[str, str, str, str]:
-    """
-    Returns (label_html, answer_text, citation_text, reasoning_text).
-    """
+def bank_qa(statement_text: str, question: str) -> tuple[str, str, str, str]:
     if not statement_text.strip():
         return (
             format_label_html("N/A"), "", "",
@@ -237,25 +443,40 @@ def bank_qa(
         )
     if not question.strip():
         return format_label_html("N/A"), "", "", "Please enter a question."
-
-    if analyzer is None:
+    if not MLX_SERVER_URL:
         return (
-            format_label_html("N/A"), "Model not loaded", "",
-            f"Model failed to load: {model_load_error}.",
+            format_label_html("N/A"), "Inference client not initialised", "",
+            f"Error: {model_load_error}.",
         )
 
-    try:
-        result = bank_analyzer.answer_question(statement_text, question)
-        label_html = format_label_html(result.label.value)
-        answer = result.answer if result.answer else "(none — information not found in statement)"
-        citation = result.citation if result.citation else "(none)"
-        return label_html, answer, citation, result.reasoning
-    except Exception as e:
-        return format_label_html("ERROR"), "", "", f"Inference error: {e}"
+    statement_text = _truncate(statement_text)
+    messages = _build_bank_messages(statement_text, question)
+
+    for attempt in range(2):
+        msgs = _apply_messages(messages, strict=(attempt == 1))
+        try:
+            raw = _run_inference(msgs)
+            result = _parse_model_output(raw, question)
+            label_html = format_label_html(result.label.value)
+            answer = result.answer or "(none — information not found in statement)"
+            citation = result.citation or "(none)"
+            return label_html, answer, citation, result.reasoning
+        except Exception as e:
+            if attempt == 0:
+                print(f"  Q&A parse attempt 1 failed ({e}). Retrying...")
+            else:
+                print(f"  Q&A parse attempt 2 failed ({e}). Returning fallback.")
+
+    return (
+        format_label_html("ABSENT"),
+        "(none — information not found in statement)",
+        "(none)",
+        "Model output could not be parsed after two attempts.",
+    )
 
 
 # ---------------------------------------------------------------------------
-# Benchmark table data (hardcoded — pre-computed base model outputs)
+# Benchmark table
 # ---------------------------------------------------------------------------
 
 import pandas as pd
@@ -315,16 +536,14 @@ if model_load_error:
     )
 
 # ---------------------------------------------------------------------------
-# CSS — CHEX design system (glassmorphic, Inter + JetBrains Mono)
+# CSS
 # ---------------------------------------------------------------------------
 
 CHEX_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* ── Design tokens ── */
 :root {
   --bg-base: #f3f4f7;
   --bg-grad: radial-gradient(ellipse 1200px 700px at 18% -10%, rgba(120,150,200,0.18), transparent 60%),
@@ -358,7 +577,6 @@ CHEX_CSS = """
   --radius-lg: 16px;
 }
 
-/* ── Body & app shell ── */
 body {
   background: var(--bg-grad) !important;
   background-attachment: fixed !important;
@@ -380,21 +598,18 @@ body {
   padding: 0 !important;
 }
 
-/* ── Nuke ALL Gradio chrome ── */
 footer, .footer, .built-with, #footer,
 footer.svelte-1ax1toq, .svelte-1ax1toq.footer,
 .gradio-container > .footer,
 .share-button, .copy-all-button,
 .gradio-container > .top-panel { display: none !important; }
 
-/* Strip the outer container's own bg/padding */
 #root, .app, main {
   background: transparent !important;
   padding: 0 !important;
   margin: 0 !important;
 }
 
-/* The inner .contain div Gradio wraps everything in */
 .contain, .container {
   padding: 0 !important;
   gap: 0 !important;
@@ -402,12 +617,7 @@ footer.svelte-1ax1toq, .svelte-1ax1toq.footer,
   background: transparent !important;
 }
 
-/* Every .block Gradio creates — reset ALL chrome */
-.block,
-.gr-block,
-.gr-box,
-.gr-group,
-.gradio-container .block {
+.block, .gr-block, .gr-box, .gr-group, .gradio-container .block {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -415,10 +625,8 @@ footer.svelte-1ax1toq, .svelte-1ax1toq.footer,
   border-radius: 0 !important;
 }
 
-/* The padding/gap between row children */
 .gap, .gr-row { gap: 20px !important; }
 
-/* Panel wrappers */
 .panel, .gr-panel, .gr-padded {
   background: transparent !important;
   border: none !important;
@@ -426,29 +634,21 @@ footer.svelte-1ax1toq, .svelte-1ax1toq.footer,
   box-shadow: none !important;
 }
 
-/* Tabs outer wrapper */
-.tabs, .gr-tabs {
-  background: transparent !important;
-  border: none !important;
-}
+.tabs, .gr-tabs { background: transparent !important; border: none !important; }
 
-/* Individual tab content areas */
 .tabitem, .gr-tabitem {
   background: transparent !important;
   border: none !important;
   padding: 24px !important;
 }
 
-/* Textbox wrappers — only reset the outer shell, let the inner textarea keep styling */
-[data-testid="textbox"],
-.gr-textbox {
+[data-testid="textbox"], .gr-textbox {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
 }
 
-/* Label blocks */
 label.block, .label-wrap {
   background: transparent !important;
   border: none !important;
@@ -458,14 +658,8 @@ label.block, .label-wrap {
   flex-direction: column !important;
 }
 
-/* Row component */
-.row, .gr-row {
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-}
+.row, .gr-row { background: transparent !important; border: none !important; padding: 0 !important; }
 
-/* Form groups */
 .form, .gr-form {
   background: transparent !important;
   border: none !important;
@@ -474,7 +668,6 @@ label.block, .label-wrap {
   gap: 14px !important;
 }
 
-/* ── Topbar ── */
 .chex-topbar {
   display: flex;
   align-items: center;
@@ -491,170 +684,72 @@ label.block, .label-wrap {
 }
 
 .chex-logo {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 26px; height: 26px; border-radius: 8px;
   background: linear-gradient(135deg, #0d1220, rgba(13,18,32,0.7));
-  color: #f3f4f7;
-  display: grid;
-  place-items: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  font-size: 11px;
+  color: #f3f4f7; display: grid; place-items: center;
+  font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px;
   letter-spacing: -0.05em;
   box-shadow: 0 4px 14px rgba(15,18,30,0.18), 0 1px 0 rgba(255,255,255,0.25) inset;
   flex-shrink: 0;
 }
 
-.chex-name {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-  font-family: 'Inter', sans-serif;
-}
-
-.chex-tag {
-  font-size: 12px;
-  color: var(--fg-muted);
-  font-weight: 400;
-  padding-left: 12px;
-  border-left: 1px solid var(--hairline);
-  font-family: 'Inter', sans-serif;
-}
+.chex-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); font-family: 'Inter', sans-serif; }
+.chex-tag { font-size: 12px; color: var(--fg-muted); font-weight: 400; padding-left: 12px; border-left: 1px solid var(--hairline); font-family: 'Inter', sans-serif; }
 
 .chex-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--fg-muted);
-  background: var(--bg-elev);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  font-family: 'JetBrains Mono', monospace;
-  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--fg-muted); background: var(--bg-elev);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  font-family: 'JetBrains Mono', monospace; white-space: nowrap;
 }
 
 .chex-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 0 3px rgba(15,157,88,0.22);
-  display: inline-block;
-  flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 3px rgba(15,157,88,0.22); display: inline-block; flex-shrink: 0;
 }
 
-/* ── Warning banner ── */
 .chex-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 20px;
-  border-bottom: 1px solid var(--amber-border);
-  background: var(--amber-bg);
-  backdrop-filter: blur(var(--blur)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
-  color: var(--amber);
-  font-size: 13px;
-  font-family: 'Inter', sans-serif;
-  font-weight: 500;
+  display: flex; align-items: center; gap: 12px; padding: 11px 20px;
+  border-bottom: 1px solid var(--amber-border); background: var(--amber-bg);
+  backdrop-filter: blur(var(--blur)) saturate(160%); -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
+  color: var(--amber); font-size: 13px; font-family: 'Inter', sans-serif; font-weight: 500;
 }
 .chex-banner-icon { font-size: 14px; flex-shrink: 0; }
 .chex-banner-body { color: var(--fg); font-weight: 400; line-height: 1.5; }
 .chex-banner-body strong { color: var(--fg); font-weight: 600; }
-.chex-banner code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  background: rgba(0,0,0,0.06);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
+.chex-banner code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
 
-/* ── Tab bar ── */
 .tab-nav {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   -webkit-backdrop-filter: blur(var(--blur)) saturate(160%) !important;
   border-bottom: 1px solid var(--hairline) !important;
-  border-top: none !important;
-  padding: 0 20px !important;
-  gap: 0 !important;
-  position: sticky !important;
-  top: 60px !important;
-  z-index: 99 !important;
-  overflow: visible !important;
+  border-top: none !important; padding: 0 20px !important; gap: 0 !important;
+  position: sticky !important; top: 60px !important; z-index: 99 !important; overflow: visible !important;
 }
 
 .tab-nav button {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 14px 16px !important;
-  color: var(--fg-muted) !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  font-family: 'Inter', sans-serif !important;
-  letter-spacing: -0.003em !important;
-  position: relative !important;
-  white-space: nowrap !important;
-  transition: color 0.15s ease !important;
-  cursor: pointer !important;
-  box-shadow: none !important;
-  outline: none !important;
+  background: transparent !important; border: none !important; border-radius: 0 !important;
+  padding: 14px 16px !important; color: var(--fg-muted) !important;
+  font-size: 13px !important; font-weight: 500 !important; font-family: 'Inter', sans-serif !important;
+  letter-spacing: -0.003em !important; position: relative !important; white-space: nowrap !important;
+  transition: color 0.15s ease !important; cursor: pointer !important; box-shadow: none !important; outline: none !important;
 }
 
-.tab-nav button:hover {
-  color: var(--fg) !important;
-  background: transparent !important;
+.tab-nav button:hover { color: var(--fg) !important; background: transparent !important; }
+
+.tab-nav button.selected, .tab-nav button[aria-selected="true"] {
+  color: var(--fg) !important; background: transparent !important; font-weight: 500 !important; box-shadow: none !important;
 }
 
-.tab-nav button.selected,
-.tab-nav button[aria-selected="true"] {
-  color: var(--fg) !important;
-  background: transparent !important;
-  font-weight: 500 !important;
-  box-shadow: none !important;
+.tab-nav button.selected::after, .tab-nav button[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px;
+  height: 1.5px; background: var(--fg); border-radius: 2px 2px 0 0;
 }
 
-.tab-nav button.selected::after,
-.tab-nav button[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: -1px;
-  height: 1.5px;
-  background: var(--fg);
-  border-radius: 2px 2px 0 0;
-}
+.tabitem { border: none !important; background: transparent !important; padding: 24px 24px !important; }
 
-/* Tab content panels */
-.tabitem {
-  border: none !important;
-  background: transparent !important;
-  padding: 24px 24px !important;
-}
-
-/* ── Card components ── */
-.chex-card,
-.gradio-container .gr-group.chex-card-group,
-.gradio-container [data-testid="group"].chex-card-group {
-  background: var(--bg-elev) !important;
-  backdrop-filter: blur(var(--blur)) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-md) !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-}
-
-/* Groups used as cards */
 .gradio-container .gr-group {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(180%) !important;
@@ -662,458 +757,197 @@ label.block, .label-wrap {
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-md) !important;
-  overflow: hidden !important;
-  padding: 0 !important;
+  overflow: hidden !important; padding: 0 !important;
 }
 
-/* Inner content of groups gets consistent padding */
 .gradio-container .gr-group > *:not(.chex-card-header):not(.chex-chip-row) {
-  padding-left: 20px !important;
-  padding-right: 20px !important;
+  padding-left: 20px !important; padding-right: 20px !important;
 }
-.gradio-container .gr-group > *:last-child {
-  padding-bottom: 18px !important;
-}
+.gradio-container .gr-group > *:last-child { padding-bottom: 18px !important; }
 
 .chex-card-header {
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--hairline);
+  padding: 16px 20px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--hairline);
 }
 
 .chex-card-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--fg);
-  white-space: nowrap;
-  font-family: 'Inter', sans-serif;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
+  display: inline-flex; align-items: center; gap: 10px; color: var(--fg);
+  white-space: nowrap; font-family: 'Inter', sans-serif;
 }
 
-.chex-card-kicker {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--fg-subtle);
-  font-weight: 400;
-  letter-spacing: 0.04em;
-}
+.chex-card-kicker { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--fg-subtle); font-weight: 400; letter-spacing: 0.04em; }
 
-/* ── Chip row (load samples) ── */
 .chex-chip-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--hairline);
-  background: var(--bg-sunken);
-  flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; padding: 12px 20px;
+  border-top: 1px solid var(--hairline); background: var(--bg-sunken); flex-wrap: wrap;
 }
 
-.chex-chip-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--fg-subtle);
-  white-space: nowrap;
-  margin-right: 4px;
-}
+.chex-chip-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); white-space: nowrap; margin-right: 4px; }
 
-/* ── Suggested question bar ── */
 .chex-suggested {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: rgba(13,18,32,0.04);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 12.5px;
-  color: var(--fg-muted);
-  font-family: 'Inter', sans-serif;
-  line-height: 1.4;
-  margin-top: 2px;
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: rgba(13,18,32,0.04); border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 12.5px; color: var(--fg-muted); font-family: 'Inter', sans-serif; line-height: 1.4; margin-top: 2px;
+}
+.chex-suggested-icon { font-size: 13px; flex-shrink: 0; opacity: 0.7; }
+
+label > span:first-child, .label-wrap span,
+.gradio-container label span.text-gray-500, span.svelte-1b6s6s {
+  font-family: 'JetBrains Mono', monospace !important; font-size: 10.5px !important;
+  font-weight: 500 !important; text-transform: uppercase !important; letter-spacing: 0.08em !important;
+  color: var(--fg-subtle) !important; margin-bottom: 6px !important; display: block !important;
 }
 
-.chex-suggested-icon {
-  font-size: 13px;
-  flex-shrink: 0;
-  opacity: 0.7;
-}
-
-
-/* ── Labels on inputs ── */
-label > span:first-child,
-.label-wrap span,
-.gradio-container label span.text-gray-500,
-span.svelte-1b6s6s {
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 10.5px !important;
-  font-weight: 500 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-  color: var(--fg-subtle) !important;
-  margin-bottom: 6px !important;
-  display: block !important;
-}
-
-/* ── Textareas & inputs ── */
-textarea,
-input[type="text"],
-input[type="search"],
-.gradio-container .gr-input,
-.gradio-container .gr-textarea,
+textarea, input[type="text"], input[type="search"],
+.gradio-container .gr-input, .gradio-container .gr-textarea,
 .gradio-container [data-testid="textbox"] textarea,
 .gradio-container [data-testid="textbox"] input {
-  background: var(--bg-input) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  color: var(--fg) !important;
-  font-family: 'Inter', sans-serif !important;
-  font-size: 13px !important;
-  line-height: 1.6 !important;
-  padding: 11px 14px !important;
+  background: var(--bg-input) !important; backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important; color: var(--fg) !important;
+  font-family: 'Inter', sans-serif !important; font-size: 13px !important;
+  line-height: 1.6 !important; padding: 11px 14px !important;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
   resize: vertical !important;
 }
 
-textarea:focus,
-input[type="text"]:focus,
+textarea:focus, input[type="text"]:focus,
 .gradio-container [data-testid="textbox"] textarea:focus,
 .gradio-container [data-testid="textbox"] input:focus {
-  border-color: var(--border-strong) !important;
-  background: var(--bg-elev-strong) !important;
-  box-shadow: 0 0 0 4px rgba(13,18,32,0.08) !important;
-  outline: none !important;
+  border-color: var(--border-strong) !important; background: var(--bg-elev-strong) !important;
+  box-shadow: 0 0 0 4px rgba(13,18,32,0.08) !important; outline: none !important;
 }
 
-textarea::placeholder,
-input::placeholder {
-  color: var(--fg-subtle) !important;
-}
+textarea::placeholder, input::placeholder { color: var(--fg-subtle) !important; }
 
-/* Read-only / output textboxes */
 textarea[readonly],
 .gradio-container [data-testid="textbox"][data-interactive="false"] textarea {
-  background: var(--bg-sunken) !important;
-  border: 1px solid var(--hairline) !important;
-  color: var(--fg) !important;
-  cursor: default !important;
+  background: var(--bg-sunken) !important; border: 1px solid var(--hairline) !important;
+  color: var(--fg) !important; cursor: default !important;
 }
 
-/* ── Buttons ── */
 .gradio-container button {
-  font-family: 'Inter', sans-serif !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  border-radius: var(--radius) !important;
+  font-family: 'Inter', sans-serif !important; font-size: 13px !important;
+  font-weight: 500 !important; border-radius: var(--radius) !important;
   padding: 10px 16px !important;
   transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
-  cursor: pointer !important;
-  letter-spacing: -0.003em !important;
+  cursor: pointer !important; letter-spacing: -0.003em !important;
 }
 
-.gradio-container button.primary,
-.gradio-container [data-testid="button"][variant="primary"],
-button.primary {
-  background: var(--fg) !important;
-  color: var(--bg-base) !important;
-  border: 1px solid var(--fg) !important;
+.gradio-container button.primary, button.primary {
+  background: var(--fg) !important; color: var(--bg-base) !important; border: 1px solid var(--fg) !important;
   box-shadow: 0 6px 18px rgba(13,18,32,0.28), 0 1px 0 rgba(255,255,255,0.1) inset !important;
 }
+.gradio-container button.primary:hover, button.primary:hover { opacity: 0.88 !important; box-shadow: 0 4px 12px rgba(13,18,32,0.22) !important; }
 
-.gradio-container button.primary:hover,
-button.primary:hover {
-  opacity: 0.88 !important;
-  box-shadow: 0 4px 12px rgba(13,18,32,0.22) !important;
+.gradio-container button.secondary, button.secondary {
+  background: var(--bg-elev) !important; backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important; color: var(--fg) !important;
+  border: 1px solid var(--border) !important; box-shadow: var(--shadow-md) !important;
+}
+.gradio-container button.secondary:hover, button.secondary:hover { background: var(--bg-elev-strong) !important; border-color: var(--border-strong) !important; }
+
+button.sm, .gradio-container button[size="sm"], button.small { font-size: 12px !important; padding: 7px 11px !important; }
+
+.gradio-container .upload-container, .gradio-container [data-testid="file"] {
+  background: var(--bg-input) !important; border: 1px dashed var(--border-strong) !important; border-radius: var(--radius) !important;
 }
 
-.gradio-container button.secondary,
-button.secondary {
-  background: var(--bg-elev) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  color: var(--fg) !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: var(--shadow-md) !important;
-}
-
-.gradio-container button.secondary:hover,
-button.secondary:hover {
-  background: var(--bg-elev-strong) !important;
-  border-color: var(--border-strong) !important;
-}
-
-/* Small / sm-size buttons */
-button.sm,
-.gradio-container button[size="sm"],
-button.small {
-  font-size: 12px !important;
-  padding: 7px 11px !important;
-}
-
-/* ── File upload ── */
-.gradio-container .upload-container,
-.gradio-container [data-testid="file"] {
-  background: var(--bg-input) !important;
-  border: 1px dashed var(--border-strong) !important;
-  border-radius: var(--radius) !important;
-}
-
-/* ── Dataframe / benchmark table ── */
-.gradio-container .wrap.svelte-a4gbbr,
-.gradio-container .table-wrap,
+.gradio-container .wrap.svelte-a4gbbr, .gradio-container .table-wrap,
 .gradio-container [data-testid="dataframe"] {
   background: var(--bg-elev) !important;
   backdrop-filter: blur(var(--blur)) saturate(180%) !important;
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-md) !important;
-  overflow: hidden !important;
+  border: 1px solid var(--border) !important; border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important; overflow: hidden !important;
 }
 
 .gradio-container table {
-  background: transparent !important;
-  font-size: 13px !important;
-  font-family: 'Inter', sans-serif !important;
-  border-collapse: separate !important;
-  border-spacing: 0 !important;
-  width: 100% !important;
-  border: none !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
+  background: transparent !important; font-size: 13px !important;
+  font-family: 'Inter', sans-serif !important; border-collapse: separate !important;
+  border-spacing: 0 !important; width: 100% !important; border: none !important;
+  box-shadow: none !important; border-radius: 0 !important;
 }
 
 .gradio-container th {
-  background: var(--bg-sunken) !important;
-  border-bottom: 1px solid var(--hairline) !important;
-  border-top: none !important;
-  padding: 14px 18px !important;
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 10.5px !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
-  color: var(--fg-muted) !important;
-  font-weight: 500 !important;
-  text-align: left !important;
+  background: var(--bg-sunken) !important; border-bottom: 1px solid var(--hairline) !important;
+  border-top: none !important; padding: 14px 18px !important;
+  font-family: 'JetBrains Mono', monospace !important; font-size: 10.5px !important;
+  text-transform: uppercase !important; letter-spacing: 0.08em !important;
+  color: var(--fg-muted) !important; font-weight: 500 !important; text-align: left !important;
 }
 
 .gradio-container td {
-  padding: 16px 18px !important;
-  border-top: 1px solid var(--hairline) !important;
-  border-bottom: none !important;
-  vertical-align: top !important;
-  line-height: 1.6 !important;
-  color: var(--fg) !important;
-  background: transparent !important;
+  padding: 16px 18px !important; border-top: 1px solid var(--hairline) !important;
+  border-bottom: none !important; vertical-align: top !important; line-height: 1.6 !important;
+  color: var(--fg) !important; background: transparent !important;
 }
 
 .gradio-container tr:first-child td { border-top: none !important; }
 
-/* Hallucinated rows — rows where 'Hallucinated?' is YES */
-.gradio-container tr:has(td:last-child:contains("YES")) td,
-.chex-hallucinated-row td {
-  background: color-mix(in srgb, var(--red-bg) 4%, transparent) !important;
-  box-shadow: inset 2px 0 0 var(--red) !important;
+.gradio-container .prose, .gradio-container .md, .gradio-container [data-testid="markdown"] {
+  color: var(--fg) !important; font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important; line-height: 1.65 !important;
 }
 
-/* ── Markdown output ── */
-.gradio-container .prose,
-.gradio-container .md,
-.gradio-container [data-testid="markdown"] {
-  color: var(--fg) !important;
-  font-family: 'Inter', sans-serif !important;
-  font-size: 13px !important;
-  line-height: 1.65 !important;
+.gradio-container .prose h2, .gradio-container .md h2 {
+  font-size: 18px !important; font-weight: 600 !important; letter-spacing: -0.02em !important;
+  color: var(--fg) !important; margin-bottom: 10px !important; margin-top: 0 !important;
 }
 
-.gradio-container .prose h2,
-.gradio-container .md h2 {
-  font-size: 18px !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.02em !important;
-  color: var(--fg) !important;
-  margin-bottom: 10px !important;
-  margin-top: 0 !important;
+.gradio-container .prose p, .gradio-container .md p {
+  color: var(--fg-muted) !important; font-size: 13px !important; line-height: 1.65 !important; margin-bottom: 8px !important;
 }
 
-.gradio-container .prose h3,
-.gradio-container .md h3 {
-  font-size: 13.5px !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.01em !important;
-  color: var(--fg) !important;
-  margin-bottom: 8px !important;
-  margin-top: 16px !important;
+.gradio-container .prose strong, .gradio-container .md strong { color: var(--fg) !important; font-weight: 600 !important; }
+
+.gradio-container .prose code, .gradio-container .md code {
+  font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important;
+  background: rgba(13,18,32,0.06) !important; padding: 1px 5px !important;
+  border-radius: 4px !important; color: var(--fg) !important;
 }
 
-.gradio-container .prose p,
-.gradio-container .md p {
-  color: var(--fg-muted) !important;
-  font-size: 13px !important;
-  line-height: 1.65 !important;
-  margin-bottom: 8px !important;
-}
-
-.gradio-container .prose strong,
-.gradio-container .md strong {
-  color: var(--fg) !important;
-  font-weight: 600 !important;
-}
-
-.gradio-container .prose code,
-.gradio-container .md code {
-  font-family: 'JetBrains Mono', monospace !important;
-  font-size: 12px !important;
-  background: rgba(13,18,32,0.06) !important;
-  padding: 1px 5px !important;
-  border-radius: 4px !important;
-  color: var(--fg) !important;
-}
-
-/* ── Bench intro card ── */
 .chex-bench-intro {
-  background: var(--bg-elev);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
+  background: var(--bg-elev); backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: 24px 28px;
-  margin-bottom: 20px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md); padding: 24px 28px; margin-bottom: 20px;
 }
 
-.chex-bench-intro h2 {
-  margin: 0 0 10px;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--fg);
-  font-family: 'Inter', sans-serif;
-}
+.chex-bench-intro h2 { margin: 0 0 10px; font-size: 19px; font-weight: 600; letter-spacing: -0.02em; color: var(--fg); font-family: 'Inter', sans-serif; }
+.chex-bench-intro p { margin: 0; color: var(--fg-muted); font-size: 13px; line-height: 1.65; font-family: 'Inter', sans-serif; }
 
-.chex-bench-intro p {
-  margin: 0;
-  color: var(--fg-muted);
-  font-size: 13px;
-  line-height: 1.65;
-  font-family: 'Inter', sans-serif;
-}
-
-.chex-bench-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.chex-bench-stat {
-  background: var(--bg-sunken);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-}
-
-.chex-bench-stat .v {
-  font-family: 'Inter', sans-serif;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  color: var(--fg);
-  line-height: 1.2;
-  margin-bottom: 4px;
-}
-
+.chex-bench-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; }
+.chex-bench-stat { background: var(--bg-sunken); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 12px 14px; }
+.chex-bench-stat .v { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -0.025em; color: var(--fg); line-height: 1.2; margin-bottom: 4px; }
 .chex-bench-stat .v.red { color: var(--red); }
 .chex-bench-stat .v.green { color: var(--green); }
+.chex-bench-stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); font-family: 'JetBrains Mono', monospace; }
 
-.chex-bench-stat .k {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--fg-subtle);
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* ── Footer ── */
 .chex-footer {
-  border-top: 1px solid var(--hairline);
-  padding: 14px 28px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  color: var(--fg-subtle);
-  font-size: 11.5px;
-  font-family: 'JetBrains Mono', monospace;
-  background: var(--bg-elev);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  margin-top: 32px;
+  border-top: 1px solid var(--hairline); padding: 14px 28px;
+  display: flex; align-items: center; gap: 18px; color: var(--fg-subtle);
+  font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-elev); backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur)); margin-top: 32px;
 }
-
 .chex-footer .sep { opacity: 0.4; }
 
-/* ── Result label container ── */
-.chex-label-wrap {
-  padding: 4px 0 8px;
-}
+.chex-label-wrap { padding: 4px 0 8px; }
+.chex-divider { height: 1px; background: var(--hairline); margin: 18px 0; }
+.chex-section-kicker { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-subtle); margin-bottom: 10px; display: block; }
+.chex-card-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
 
-/* ── Divider ── */
-.chex-divider {
-  height: 1px;
-  background: var(--hairline);
-  margin: 18px 0;
-}
-
-/* ── Section kicker ── */
-.chex-section-kicker {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--fg-subtle);
-  margin-bottom: 10px;
-  display: block;
-}
-
-/* ── Card body padding ── */
-.chex-card-body {
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-/* ── Scrollbars ── */
 *::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-/* ── Gradio utility gaps ── */
 .gradio-container .gap-4 { gap: 14px !important; }
 .gradio-container .gap-2 { gap: 8px !important; }
 
-/* Nested sub-tabs (bank statement) */
-.tabitem .tab-nav {
-  position: static !important;
-  top: auto !important;
-}
+.tabitem .tab-nav { position: static !important; top: auto !important; }
 
-/* Responsive spacing */
 @media (max-width: 900px) {
   .chex-topbar { padding: 0 16px; }
   .chex-tag { display: none; }
@@ -1124,7 +958,7 @@ button.small {
 """
 
 # ---------------------------------------------------------------------------
-# Static HTML strings
+# Static HTML
 # ---------------------------------------------------------------------------
 
 TOPBAR_HTML = """
@@ -1211,112 +1045,97 @@ STATEMENT_RESULTS_HEADER_HTML = """
 # Gradio UI
 # ---------------------------------------------------------------------------
 
-with gr.Blocks(
-    title="CHEX — Document Intelligence",
-) as demo:
+with gr.Blocks(title="CHEX — Document Intelligence") as demo:
 
-    # ── Topbar ──────────────────────────────────────────────────────────── #
     gr.HTML(TOPBAR_HTML)
 
-    # ── Warning banner (only if model failed) ───────────────────────────── #
     if WARNING_HTML:
         gr.HTML(WARNING_HTML)
 
-    # ── Tabs ────────────────────────────────────────────────────────────── #
     with gr.Tabs():
 
-        # ================================================================== #
-        # Tab 01 — Contract Analysis                                          #
-        # ================================================================== #
+        # ── Tab 01: Contract Analysis ──────────────────────────────────── #
         with gr.Tab("01  Contract analysis"):
             with gr.Row(equal_height=False):
 
-                # ── Left panel: source document ──────────────────────────── #
                 with gr.Column(scale=9):
-                  with gr.Group():
-                    gr.HTML(CONTRACT_SOURCE_HEADER_HTML)
-                    contract_input = gr.Textbox(
-                        label="Contract text",
-                        lines=20,
-                        placeholder="Paste your contract text here, or load a sample below…",
-                        show_label=False,
-                    )
-                    gr.HTML(CHIP_ROW_HTML)
-                    with gr.Row():
-                        btn_software = gr.Button("Software License", variant="secondary", size="sm")
-                        btn_nda = gr.Button("NDA", variant="secondary", size="sm")
-                        btn_service = gr.Button("Service Agreement", variant="secondary", size="sm")
-                    suggested_q = gr.HTML(value="", visible=False)
-
-                # ── Right panel: question + results ──────────────────────── #
-                with gr.Column(scale=11):
-                  with gr.Group():
-                    gr.HTML(CONTRACT_RESULTS_HEADER_HTML)
-                    with gr.Row():
-                        question_input = gr.Textbox(
-                            label="Question",
-                            placeholder="e.g., What is the limitation of liability?",
-                            lines=1,
+                    with gr.Group():
+                        gr.HTML(CONTRACT_SOURCE_HEADER_HTML)
+                        contract_input = gr.Textbox(
+                            label="Contract text",
+                            lines=20,
+                            placeholder="Paste your contract text here, or load a sample below…",
                             show_label=False,
-                            scale=8,
                         )
-                        analyze_btn = gr.Button("Analyze ↵", variant="primary", scale=2)
-                    label_display = gr.HTML(value=format_label_html("N/A"))
-                    answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
-                    citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
-                    reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
+                        gr.HTML(CHIP_ROW_HTML)
+                        with gr.Row():
+                            btn_software = gr.Button("Software License", variant="secondary", size="sm")
+                            btn_nda = gr.Button("NDA", variant="secondary", size="sm")
+                            btn_service = gr.Button("Service Agreement", variant="secondary", size="sm")
+                        suggested_q = gr.HTML(value="", visible=False)
 
-        # ================================================================== #
-        # Tab 02 — Bank Statements                                            #
-        # ================================================================== #
+                with gr.Column(scale=11):
+                    with gr.Group():
+                        gr.HTML(CONTRACT_RESULTS_HEADER_HTML)
+                        with gr.Row():
+                            question_input = gr.Textbox(
+                                label="Question",
+                                placeholder="e.g., What is the limitation of liability?",
+                                lines=1,
+                                show_label=False,
+                                scale=8,
+                            )
+                            analyze_btn = gr.Button("Analyze ↵", variant="primary", scale=2)
+                        label_display = gr.HTML(value=format_label_html("N/A"))
+                        answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
+                        citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
+                        reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
+
+        # ── Tab 02: Bank Statements ────────────────────────────────────── #
         with gr.Tab("02  Bank statements"):
             with gr.Row(equal_height=False):
 
-                # ── Left panel: statement input ───────────────────────────── #
                 with gr.Column(scale=9):
-                  with gr.Group():
-                    gr.HTML(STATEMENT_SOURCE_HEADER_HTML)
-                    with gr.Tabs():
-                        with gr.Tab("Paste text"):
-                            bank_paste_input = gr.Textbox(
-                                label="Bank statement text",
-                                lines=20,
-                                placeholder="Paste your bank statement here, or load the sample below…",
-                                show_label=False,
-                            )
-                            btn_load_statement = gr.Button("Load sample statement", variant="secondary", size="sm")
-                        with gr.Tab("Upload PDF"):
-                            bank_pdf_input = gr.File(label="PDF bank statement", file_types=[".pdf"])
-                        with gr.Tab("Upload CSV"):
-                            bank_csv_input = gr.File(label="CSV bank statement", file_types=[".csv"])
+                    with gr.Group():
+                        gr.HTML(STATEMENT_SOURCE_HEADER_HTML)
+                        with gr.Tabs():
+                            with gr.Tab("Paste text"):
+                                bank_paste_input = gr.Textbox(
+                                    label="Bank statement text",
+                                    lines=20,
+                                    placeholder="Paste your bank statement here, or load the sample below…",
+                                    show_label=False,
+                                )
+                                btn_load_statement = gr.Button("Load sample statement", variant="secondary", size="sm")
+                            with gr.Tab("Upload PDF"):
+                                bank_pdf_input = gr.File(label="PDF bank statement", file_types=[".pdf"])
+                            with gr.Tab("Upload CSV"):
+                                bank_csv_input = gr.File(label="CSV bank statement", file_types=[".csv"])
 
-                # ── Right panel: summary + Q&A ───────────────────────────── #
                 with gr.Column(scale=11):
-                  with gr.Group():
-                    gr.HTML(STATEMENT_RESULTS_HEADER_HTML)
-                    analyse_stmt_btn = gr.Button("Analyse statement", variant="primary")
-                    summary_output = gr.Markdown(value="*Run 'Analyse statement' to generate a financial summary.*")
-                    gr.HTML('<div class="chex-divider"></div>')
-                    gr.HTML('<span class="chex-section-kicker">Ask a question</span>')
-                    with gr.Row():
-                        bank_question_input = gr.Textbox(
-                            label="Question",
-                            placeholder="e.g., What was the largest debit this month?",
-                            lines=1,
-                            show_label=False,
-                            scale=8,
-                        )
-                        bank_ask_btn = gr.Button("Ask ↵", variant="secondary", scale=2)
-                    bank_label_display = gr.HTML(value=format_label_html("N/A"))
-                    bank_answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
-                    bank_citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
-                    bank_reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
+                    with gr.Group():
+                        gr.HTML(STATEMENT_RESULTS_HEADER_HTML)
+                        analyse_stmt_btn = gr.Button("Analyse statement", variant="primary")
+                        summary_output = gr.Markdown(value="*Run 'Analyse statement' to generate a financial summary.*")
+                        gr.HTML('<div class="chex-divider"></div>')
+                        gr.HTML('<span class="chex-section-kicker">Ask a question</span>')
+                        with gr.Row():
+                            bank_question_input = gr.Textbox(
+                                label="Question",
+                                placeholder="e.g., What was the largest debit this month?",
+                                lines=1,
+                                show_label=False,
+                                scale=8,
+                            )
+                            bank_ask_btn = gr.Button("Ask ↵", variant="secondary", scale=2)
+                        bank_label_display = gr.HTML(value=format_label_html("N/A"))
+                        bank_answer_output = gr.Textbox(label="Answer", interactive=False, lines=3)
+                        bank_citation_output = gr.Textbox(label="Citation", interactive=False, lines=2)
+                        bank_reasoning_output = gr.Textbox(label="Reasoning", interactive=False, lines=3)
 
             bank_statement_state = gr.State("")
 
-        # ================================================================== #
-        # Tab 03 — Benchmark                                                  #
-        # ================================================================== #
+        # ── Tab 03: Benchmark ──────────────────────────────────────────── #
         with gr.Tab("03  Benchmark"):
             gr.HTML(BENCH_INTRO_HTML)
             gr.Dataframe(
@@ -1327,89 +1146,38 @@ with gr.Blocks(
                 interactive=False,
             )
 
-    # ── Footer ──────────────────────────────────────────────────────────── #
     gr.HTML(FOOTER_HTML)
 
-    # ====================================================================== #
-    # Event handlers                                                          #
-    # ====================================================================== #
+    # ── Event handlers ─────────────────────────────────────────────────── #
 
     def load_software():
-        hint = (
-            '<div class="chex-suggested">'
-            '<span class="chex-suggested-icon">💡</span>'
-            '<span><strong>Suggested:</strong> What is the limitation of liability in this agreement?</span>'
-            '</div>'
-        )
-        return (
-            SOFTWARE_LICENSE,
-            SAMPLE_QUESTIONS["software_license.txt"],
-            gr.update(value=hint, visible=True),
-        )
+        hint = '<div class="chex-suggested"><span class="chex-suggested-icon">💡</span><span><strong>Suggested:</strong> What is the limitation of liability in this agreement?</span></div>'
+        return SOFTWARE_LICENSE, SAMPLE_QUESTIONS["software_license.txt"], gr.update(value=hint, visible=True)
 
     def load_nda():
-        hint = (
-            '<div class="chex-suggested">'
-            '<span class="chex-suggested-icon">💡</span>'
-            '<span><strong>Suggested:</strong> Does this agreement include a non-compete clause?</span>'
-            '</div>'
-        )
-        return (
-            NDA,
-            SAMPLE_QUESTIONS["nda.txt"],
-            gr.update(value=hint, visible=True),
-        )
+        hint = '<div class="chex-suggested"><span class="chex-suggested-icon">💡</span><span><strong>Suggested:</strong> Does this agreement include a non-compete clause?</span></div>'
+        return NDA, SAMPLE_QUESTIONS["nda.txt"], gr.update(value=hint, visible=True)
 
     def load_service():
-        hint = (
-            '<div class="chex-suggested">'
-            '<span class="chex-suggested-icon">💡</span>'
-            '<span><strong>Suggested:</strong> Does this contract include a termination for convenience clause? '
-            '<em>(expected: ABSENT)</em></span>'
-            '</div>'
-        )
-        return (
-            SERVICE_AGREEMENT,
-            SAMPLE_QUESTIONS["service_agreement.txt"],
-            gr.update(value=hint, visible=True),
-        )
+        hint = '<div class="chex-suggested"><span class="chex-suggested-icon">💡</span><span><strong>Suggested:</strong> Does this contract include a termination for convenience clause? <em>(expected: ABSENT)</em></span></div>'
+        return SERVICE_AGREEMENT, SAMPLE_QUESTIONS["service_agreement.txt"], gr.update(value=hint, visible=True)
 
-    btn_software.click(
-        fn=load_software,
-        inputs=[],
-        outputs=[contract_input, question_input, suggested_q],
-    )
-    btn_nda.click(
-        fn=load_nda,
-        inputs=[],
-        outputs=[contract_input, question_input, suggested_q],
-    )
-    btn_service.click(
-        fn=load_service,
-        inputs=[],
-        outputs=[contract_input, question_input, suggested_q],
-    )
+    btn_software.click(fn=load_software, inputs=[], outputs=[contract_input, question_input, suggested_q])
+    btn_nda.click(fn=load_nda, inputs=[], outputs=[contract_input, question_input, suggested_q])
+    btn_service.click(fn=load_service, inputs=[], outputs=[contract_input, question_input, suggested_q])
 
     analyze_btn.click(
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
     )
-
-    # Trigger on Enter in question field
     question_input.submit(
         fn=analyze_contract,
         inputs=[contract_input, question_input],
         outputs=[label_display, answer_output, citation_output, reasoning_output],
     )
 
-    # ── Bank Statement handlers ──────────────────────────────────────────── #
-
-    btn_load_statement.click(
-        fn=lambda: SAMPLE_STATEMENT,
-        inputs=[],
-        outputs=[bank_paste_input],
-    )
+    btn_load_statement.click(fn=lambda: SAMPLE_STATEMENT, inputs=[], outputs=[bank_paste_input])
 
     analyse_stmt_btn.click(
         fn=analyse_bank_statement,
@@ -1422,7 +1190,6 @@ with gr.Blocks(
         inputs=[bank_statement_state, bank_question_input],
         outputs=[bank_label_display, bank_answer_output, bank_citation_output, bank_reasoning_output],
     )
-
     bank_question_input.submit(
         fn=bank_qa,
         inputs=[bank_statement_state, bank_question_input],
